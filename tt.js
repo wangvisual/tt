@@ -1,0 +1,599 @@
+Ext.namespace('TT');
+
+TT.app = function() {
+
+    // private variables
+    // const
+    var perPage = 40;
+    var tturl = './';
+    var loginTypes = [ [0, 'Admin'], [1, 'Normal'], [2, 'Disabled'] ];
+    var genderTypes = [ ['Other', 'Other'], ['Male', 'Male'], ['Female', 'Female'] ];
+
+    var userid = '';
+    var ulds; // UserList Data Store
+    var shopds; // Shop Data Store
+    var spinner;
+    var logpanel;
+    var listpanel;
+    var msgpanel;
+
+    Ext.QuickTips.init();
+    Ext.form.Field.prototype.msgTarget = 'side';
+
+    // classes
+    // copy from debug.js
+    var LogPanel = Ext.extend(Ext.Panel, {
+        autoScroll: true,
+        border: false,
+        limit: 10,
+
+        log : function(){
+            var markup = [  '<div style="padding:1px !important;border-bottom:1px solid #ccc;">',
+                        Ext.util.Format.htmlEncode(Array.prototype.join.call(arguments, ', ')).replace(/\n/g, '<br />').replace(/\s/g, '&#160;'),
+                        '</div>'].join('');
+            var addedEl = this.body.insertHtml('beforeend', markup, true);
+            if ( ! this.body.addedArray ) {
+                this.body.addedArray = new Array();
+            }
+            this.body.addedArray.push(addedEl);
+            if ( this.body.addedArray.length > this.limit ) {
+                addedEl = this.body.addedArray.pop();
+                addedEl.remove();
+            }
+            this.body.scrollTo('top', 100000, true);
+        },
+
+        clear : function(){
+            this.body.update('');
+            this.body.dom.scrollTop = 0;
+        }
+    });
+
+    var MsgPanel = Ext.extend(Ext.Panel, {
+
+        msg : function(i,l){
+            if (typeof(i)!='undefined'){
+                this.body.update(i);
+            }
+        },
+
+        clear : function(){
+            this.body.update('');
+        }
+    });
+
+    // private functions
+    Ext.apply(Ext.util.Format, {
+        formatMoney: function(v) {
+            return ff(v);
+        },
+        formatBalance: function(v,metadata) {
+            if ( v && v.indexOf('(')!= -1 && metadata ) {
+                metadata.css = 'BalanceHost';
+            }
+            return v;
+        }
+    });
+
+    function ff(i, n) {
+        if ( typeof(i) == 'string' && '' === i ) {
+            return i;
+        }
+        if ( typeof(n) != 'number' ) {
+            n = 2;
+        }
+        var m = 1;
+        for ( var j=1; j<=n; j++ ) {
+            m = m*10.0;
+        }
+        var r = Math.round(i*m)/m;
+        return r;
+    };
+
+    var editUserInfo = function(userid) {
+
+        function editUserChanged(){
+            var v = Ext.getCmp('editusercombo').getValue();
+            var u = Ext.getCmp('edituserid');
+            var s = Ext.getCmp('editusersubmit');
+            if ( u.originalValue == '' ) {
+                u.setReadOnly(false);
+            } else {
+                u.setReadOnly(true);
+            }
+            var d = false; // dirty
+            var l = true; // valid
+            var pa = Ext.getCmp('edituserpanel');
+            function isd(e) {
+                if (e.items) {
+                    if ( e.xtype != 'fieldset' || ! e.collapsed ) {
+                        e.items.each(isd);
+                    }
+                } else {
+                    d = d || e.isDirty();
+                    l = l && e.isValid(true);
+                }
+            }
+            isd(pa);
+            if ( d && l ) {
+                s.enable();
+            } else {
+                s.disable();
+            }
+        }
+
+        function reloadUserPanel(p){
+            if (typeof(userid) != 'undefined' && userid != '') {
+                p.form.load({params: {action: 'getUserInfo', userid: userid}, waitMsg: 'Loading...' });
+            }
+        }
+
+        var fp = new Ext.FormPanel({
+            url: tturl,
+            method: 'POST',
+            id: 'edituserpanel',
+            trackResetOnLoad: true,
+            frame: true,
+            reader: new Ext.data.JsonReader({
+                    successProperty: 'success',
+                    root : 'user'
+                },[
+                {name: 'userid', type: 'string'},
+                {name: 'nick_name', type: 'string'},
+                {name: 'cn_name', type: 'string'},
+                {name: 'logintype', type: 'int'},
+                {name: 'gender', type: 'string'},
+                {name: 'point', type: 'int'}
+            ]),
+            labelWidth: 70,
+            labelAlign: 'right',
+            defaultType: 'textfield',
+            items: [
+                { fieldLabel: 'account', name: 'userid', id: 'edituserid', allowBlank: false, readOnly: true },
+                { fieldLabel: '外号', name: 'nick_name', id: 'editnickname', allowBlank: true },
+                { fieldLabel: '中文名', name: 'cn_name', id: 'editcnname', allowBlank: true },
+                { fieldLabel: '类型', xtype: 'combo', id: 'editusercombo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
+                  store: new Ext.data.SimpleStore({
+                         fields:['id', 'type']
+                        ,data:loginTypes}),
+                  displayField: 'type', valueField: 'id', hiddenName: 'logintype'
+                },
+                { fieldLabel: '性别', xtype: 'combo', id: 'editgendercombo', name: 'enditgenderfake', allowBlank: false, editable: false, typeAhead: false,
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
+                  store: new Ext.data.SimpleStore({
+                         fields:['id', 'type']
+                        ,data:genderTypes}),
+                  displayField: 'type', valueField: 'id', hiddenName: 'gender'
+                },
+                { fieldLabel: '积分', name: 'point', id: 'editpoint', allowBlank: true }
+            ],
+            monitorValid: true,
+            listeners: {
+                clientvalidation: editUserChanged
+            },
+            buttonAlign: 'right',
+            buttons: [{
+                text: 'Save', xtype: 'button', id: 'editusersubmit', type: 'submit', disabled: true,
+                handler: function(){
+                    fp.getForm().submit({
+                        params: {action: 'editUser'},
+                        success: function(){msgpanel.msg("User infomation Saved.",0); showGeneralInfo(); win.close();},
+                        failure: function(conn,resp){
+                            var msg = "Save failed";
+                            if ( resp && resp.result && resp.result.msg) {
+                                msg += ": " + resp.result.msg;
+                            }
+                            msgpanel.msg(msg,2);
+                        }
+                    });
+                }
+            },{
+                text: 'Reset', xtype: 'button', type: 'reset',
+                handler: function(){fp.getForm().reset();}
+            }]
+        });
+
+        var win = new Ext.Window({
+            title: 'Edit User',
+            width:300,
+            modal: true,
+            items: [fp]
+        });
+
+        win.show();
+        reloadUserPanel(fp);
+        win.doLayout();
+    };
+
+    var showGeneralInfo = function() {
+        function changeTxt(n) {
+            if ( typeof(n) == "string" ) {
+                Ext.get('infoname').dom.innerHTML = n;
+                Ext.get('infoemail').dom.innerHTML = '';
+                Ext.get('infogender').dom.innerHTML = '';
+                Ext.get('infopoint').dom.innerHTML = '';
+            } else {
+                Ext.get('infoname').dom.innerHTML = "Welcome " + n.name;
+                Ext.get('infoemail').dom.innerHTML = n.email;
+                Ext.get('infogender').dom.innerHTML = "性别: " + n.gender;
+                Ext.get('infopoint').dom.innerHTML = "积分: " + n.point;
+            }
+        }
+        changeTxt('Loading...');
+        Ext.Ajax.request({
+           url: tturl,
+           method: 'POST',
+           success: function ( result, request) {
+                    var jsonData = Ext.util.JSON.decode(result.responseText);
+                    userid = jsonData.user[0].userid;
+                    changeTxt(jsonData.user[0]);
+                },
+           failure: function () { changeTxt("Failed"); },
+           params: { action: 'getGeneralInfo' }
+        });
+    };
+
+    var editMatch = function(in_match_id) {
+        var setsTypes = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getSets', filter: 'ongoing'},
+            autoLoad: true,
+            root: 'sets',
+            fields: ['set_id', 'set_name']
+        });
+
+        var userList = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getUserList', filter: 'valid'},
+            autoLoad: true,
+            root: 'users',
+            fields: ['userid', 'full_name']
+        });
+
+
+        function reloadMatchPanel(p){
+            p.form.load({params: {action: 'getMatchInfo', match_id: in_match_id}, waitMsg: 'Loading...' });
+        }
+
+        function generateGames() {
+            var games = new Array();
+            for ( var j=1; j<=7; j++ ) {
+                var item1 = {xtype : "numberfield", fieldLabel: '第' + j +'局', name: 'game' + j + '_point1' };
+                var item2 = {xtype : "numberfield", fieldLabel: ' ', name: 'game' + j + '_point2' };
+                games.push({ layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [ {items: [item1]}, {items: [item2]} ] });
+            }
+            return games;
+        }
+
+        var fp = new Ext.FormPanel({
+            url: tturl,
+            method: 'POST',
+            id: 'editmatchpanel',
+            trackResetOnLoad: true,
+            layout : "form",
+            frame: true,
+            reader: new Ext.data.JsonReader({
+                    successProperty: 'success',
+                    root : 'match'
+                },[
+                {name: 'match_id', type: 'int'},
+                {name: 'set_id', type: 'int'},
+                {name: 'date', type: 'date'},
+                {name: 'comment', type: 'string'},
+                {name: 'userid1', type: 'string'},
+                {name: 'userid2', type: 'string'},
+                {name: 'game_win', type: 'int'},
+                {name: 'game_win', type: 'int'},
+                {name: 'game_lose', type: 'int'},
+                {name: 'game1_point1', type: 'int'},
+                {name: 'game2_point1', type: 'int'},
+                {name: 'game3_point1', type: 'int'},
+                {name: 'game4_point1', type: 'int'},
+                {name: 'game5_point1', type: 'int'},
+                {name: 'game6_point1', type: 'int'},
+                {name: 'game7_point1', type: 'int'},
+                {name: 'game1_point2', type: 'int'},
+                {name: 'game2_point2', type: 'int'},
+                {name: 'game3_point2', type: 'int'},
+                {name: 'game4_point2', type: 'int'},
+                {name: 'game5_point2', type: 'int'},
+                {name: 'game6_point2', type: 'int'},
+                {name: 'game7_point2', type: 'int'}
+            ]),
+            labelWidth: 70,
+            labelAlign: 'right',
+            defaultType: 'textfield',
+            items: [
+                { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'set_id_fake', allowBlank: false, editable: false, forceSelection: true,
+                  triggerAction: 'all', mode: 'local',
+                  store: setsTypes,
+                  displayField: 'set_name', valueField: 'set_id', hiddenName: 'set_id'
+                },
+                { layout : "column", xtype: 'container', pack: 'center', defaults: {layout: 'form'}, items: [
+                    { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: false, forceSelection: true,
+                      triggerAction: 'all', mode: 'local',
+                      store: userList,
+                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1'
+                    },
+                    { xtype: 'box', pack: 'center', autoEl: {tag: 'img', src: './etc/tt.png'} },
+                    { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: false, forceSelection: true,
+                      triggerAction: 'all', mode: 'local',
+                      store: userList,
+                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid2'
+                    },
+                ]},
+                generateGames(),
+                { fieldLabel: 'comment', name: 'comment', allowBlank: true }
+            ],
+            monitorValid: true,
+            listeners: {
+                //clientvalidation: editUserChanged
+            },
+            buttonAlign: 'right',
+            buttons: [{
+                text: 'Save', xtype: 'button', id: 'editmatchsubmit', type: 'submit', disabled: true,
+                handler: function(){
+                    fp.getForm().submit({
+                        params: {action: 'editMatch'},
+                        success: function(){msgpanel.msg("Match Saved.",0); setupPointList(); win.close();},
+                        failure: function(conn,resp){
+                            var msg = "Save failed";
+                            if ( resp && resp.result && resp.result.msg) {
+                                msg += ": " + resp.result.msg;
+                            }
+                            msgpanel.msg(msg,2);
+                        }
+                    });
+                }
+            },{
+                text: 'Reset', xtype: 'button', type: 'reset',
+                handler: function(){fp.getForm().reset();}
+            }]
+        });
+
+        var win = new Ext.Window({
+            title: '比赛结果',
+            width:600,
+            modal: true,
+            items: [fp]
+        });
+
+        win.show();
+        reloadMatchPanel(fp);
+        win.doLayout();
+    };
+
+    var setupPointList = function() {
+        var myRecordObj = Ext.data.Record.create([
+            {name: 'userid'},
+            {name: 'employeeNumber', type: 'int'},
+            {name: 'name'},
+            {name: 'nick_name'},
+            {name: 'cn_name'},
+            {name: 'gender'},
+            {name: 'win', type: 'int'},
+            {name: 'loose', type: 'int'},
+            {name: 'point', type: 'int', sortDir: 'DESC'}
+        ]);
+        var myReader = new Ext.data.JsonReader({
+            root:'users',
+            id: 'userid'
+        }, myRecordObj );
+        var myds = new Ext.data.Store({
+            proxy: new Ext.data.HttpProxy({
+                        url: tturl,
+                        method: 'POST'
+                   }),
+            baseParams: {action: 'getPointList'},
+            reader: myReader,
+            sortInfo: {field: 'point', direction: 'DESC'}
+        });
+        var mycm = new Ext.grid.ColumnModel([
+            new Ext.grid.RowNumberer(),
+            {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
+            {header: 'employeeNumber', width: 0, dataIndex: 'employeeNumber', hidden: true},
+            {header: 'Name', width: 120, sortable: true, dataIndex: 'name'},
+            {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
+            {header: '姓名', width: 100, sortable: true, dataIndex: 'cn_name'},
+            {header: '性别', width: 100, sortable: true, dataIndex: 'gender'},
+            {header: '胜', width: 70, sortable: true, dataIndex: 'win'},
+            {header: '负', width: 70, sortable: true, dataIndex: 'loose'},
+            {header: '分数', width: 70, sortable: true, dataIndex: 'point'}
+        ]);
+
+        var grid = new Ext.grid.GridPanel({
+            ds: myds,
+            cm: mycm,
+            viewConfig: {
+                forceFit: true
+            },
+            title : '积分概览',
+            id: 'pointlist',
+            autoHeight: true, // or there will be one row less
+            //listeners: {'dblclick': function(){ editWaste(1); }},
+            border: false,
+            frame: true
+        });
+
+        myds.load();
+        listpanel.removeAll(true);
+        listpanel.add(grid);
+        listpanel.doLayout();
+
+        grid.getSelectionModel().selectFirstRow();
+    };
+
+    // public space
+    return {
+        // public properties
+
+        // public methods
+        logAjaxStart: function(conn, options) {
+            spinner.setPosition(0,0);
+            spinner.show();
+            if ( typeof(spinner.count) == 'undefined' ) {
+                spinner.count = 0;
+            }
+            spinner.count = spinner.count + 1;
+            var p = options.params;
+            if ( typeof(p) == 'string' ) {
+                logpanel.log('Request: ' + p);
+            } else if ( typeof(p) == 'object' ) {
+                if ( p.action ) {
+                    var a = p.action;
+                    var s = 'Request: ' + a;
+                    for(var key in p){
+                        var t = typeof p[key];
+                        if( t != "function" && ( t != "object" || typeof(p[key][0])!='undefined' ) && key != 'action' ){
+                            s = s + String.format(" {0}={1}", key, p[key]);
+                        }
+                    }
+                    logpanel.log(s);
+                }
+            }
+        },
+
+        logAjaxComplete: function(conn, response, options) {
+            spinner.count = spinner.count - 1;
+            if ( spinner.count <= 0 ) {
+                spinner.hide();
+            }
+        },
+
+        logAjaxException: function(conn, response, options) {
+            spinner.count = spinner.count - 1;
+            if ( spinner.count <= 0 ) {
+                spinner.hide();
+            }
+            var r = "Exception";
+            if ( response && response.statusText ) {
+                r = r + ": " + response.statusText;
+            }
+            logpanel.log(r);
+        },
+
+        main_page: function(){
+
+            spinner = new Ext.Panel({
+                id: 'spinner',
+                split: false,
+                border: false,
+                floating: true,
+                shadow: false,
+                width: 32+2,
+                height: 32+2,
+                html: '<img src="etc/ext/resources/images/default/shared/large-loading.gif" />'
+            });
+
+            var infopanel = new Ext.Panel({
+                id: 'infopanel',
+                title: '<center>乒乓球比赛与积分系统</center>',
+                region: 'north',
+                split: false,
+                border: false,
+                collapsible: true,
+                height: 50,
+                html: '<form name=loginform action="' + tturl + '" method="POST">'
+                    + '<table id="infotable"><tr>'
+                    + '<td id="infoname">Loading...</td>'
+                    + '<td id="infoemail"></td>'
+                    + '<td id="infogender"></td>'
+                    + '<td id="infopoint"></td>'
+                    + '</tr></table></form>'
+            });
+
+            var funcpanel = new Ext.Panel({
+                id: 'funcpanel',
+                defaultType: 'button',
+                title: 'Functions',
+                region: 'west',
+                split: true,
+                border: true,
+                collapsible: true,
+                width: 100,
+                minSize: 100,
+                maxSize: 200,
+                defaults: { minWidth: 98, bodyStyle: 'padding: 15px' },
+                items: [{
+                    text: '我的信息',
+                    handler: function () { editUserInfo(userid); }
+                },{
+                    text: '积分概览',
+                    handler: setupPointList
+                },{
+                    text: '记录比赛结果',
+                    handler: function () { editMatch(); }
+                },{
+                    text: 'New Waste',
+                    //handler: editWaste
+                },{
+                    text: 'New User',
+                    handler: function () { editUserInfo(); }
+                },{
+                    text: 'Logs'
+                }]
+            });
+
+            logpanel = new LogPanel({
+                id: 'logpanel',
+                limit: 1000,
+                layout: 'fit',
+                title: 'Debug Log',
+                region: 'east',
+                split: true,
+                border: true,
+                collapsible: true,
+                //collapsed: true,
+                width: 120,
+                minSize: 120,
+                maxSize: 400,
+                tbar: [{
+                    text: 'Clean',
+                    minWidth: 115,
+                    handler: function() { logpanel.clear(); }
+                }]
+            });
+
+            listpanel = new Ext.Panel({
+                id: 'listpanel',
+                region: 'center',
+                split: true,
+                border: true
+            });
+
+            msgpanel = new MsgPanel({
+                id: 'msgpanel',
+                region: 'south',
+                height: 20,
+                split: false,
+                border: true
+            });
+
+            var viewport = new Ext.Viewport({
+                layout:'border',
+                items:[ spinner, infopanel, logpanel, funcpanel, listpanel, msgpanel ]
+            });
+
+            Ext.Ajax.on('beforerequest', TT.app.logAjaxStart, this);
+            Ext.Ajax.on('requestcomplete', TT.app.logAjaxComplete, this);
+            Ext.Ajax.on('requestexception', TT.app.logAjaxException, this);
+
+            infopanel.body.on({
+                'dblclick': function() { showGeneralInfo(); },
+                 scope: this
+            });
+
+            logpanel.log("OK.");
+            msgpanel.msg("Ready.");
+            showGeneralInfo();
+            setupPointList();
+        }
+    };
+}();
+
+Ext.apply(TT.app, {
+    // change public variable here if needed.
+});

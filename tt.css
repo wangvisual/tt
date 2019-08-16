@@ -1,0 +1,22 @@
+#infotable tr td {
+    white-space: nowrap;
+    padding: 1px 50px 1px 1px;
+    width: 100%;
+}
+
+#infobuttontd {
+    padding: 1px !important;
+    text-align: right;
+}
+
+#spinner * {
+    background-color: transparent;
+}
+
+.modifiedM {
+    color: red !important;
+}
+
+.BalanceHost {
+    color: green;
+}
