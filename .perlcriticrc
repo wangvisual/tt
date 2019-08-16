@@ -1,0 +1,24 @@
+# please alpha sort config items as you add them
+severity = 5
+
+exclude = Subroutines::ProhibitSubroutinePrototypes
+
+[CodeLayout::ProhibitHardTabs]
+severity = 5
+allow_leading_tabs = 0
+
+[CodeLayout::ProhibitTrailingWhitespace]
+severity = 5
+
+[ControlStructures::ProhibitCascadingIfElse]
+severity = 5
+
+[RegularExpressions::ProhibitUnusedCapture]
+severity = 5
+
+[TestingAndDebugging::ProhibitNoStrict]
+allow = vars subs refs
+
+[BuiltinFunctions::ProhibitStringyEval]
+allow_includes = 1
+
