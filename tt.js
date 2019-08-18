@@ -7,6 +7,7 @@ TT.app = function() {
     var perPage = 40;
     var tturl = './';
     var loginTypes = [ [0, '管理员'], [1, '一般用户'], [2, '无效用户'] ];
+    var stageTypes = [ [0, '报名'], [1, '比赛中'], [2, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
 
     var userid = '';
@@ -96,7 +97,6 @@ TT.app = function() {
     var editUserInfo = function(userid) {
 
         function editUserChanged(panel, valid){
-            var v = Ext.getCmp('editusercombo').getValue();
             var u = Ext.getCmp('edituserid');
             var s = Ext.getCmp('editusersubmit');
             if ( u.originalValue == '' ) {
@@ -139,9 +139,9 @@ TT.app = function() {
             defaultType: 'textfield',
             items: [
                 { fieldLabel: 'account', name: 'userid', id: 'edituserid', allowBlank: false, readOnly: true },
-                { fieldLabel: '姓名', name: 'cn_name', id: 'editcnname', allowBlank: true },
-                { fieldLabel: '外号', name: 'nick_name', id: 'editnickname', allowBlank: true },
-                { fieldLabel: '类型', xtype: 'combo', id: 'editusercombo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
+                { fieldLabel: '姓名', name: 'cn_name', allowBlank: true },
+                { fieldLabel: '外号', name: 'nick_name', allowBlank: true },
+                { fieldLabel: '类型', xtype: 'combo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
                   triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
                   store: new Ext.data.SimpleStore({
                          fields:['id', 'type']
@@ -184,7 +184,100 @@ TT.app = function() {
         });
 
         var win = new Ext.Window({
-            title: 'Edit User',
+            title: '编辑人员',
+            width:300,
+            modal: true,
+            items: [fp]
+        });
+
+        win.show();
+        reloadUserPanel(fp);
+        win.doLayout();
+    };
+
+    var editSerise = function(serise_id) {
+
+        function editStageChange(panel, valid){
+            var u = Ext.getCmp('editseriseid');
+            var s = Ext.getCmp('editserisesubmit');
+            if ( u.originalValue == '' ) {
+                u.setDisabled(false);
+            }
+            if ( valid && formIsDirty('editserisepanel') ) {
+                s.enable();
+            } else {
+                s.disable();
+            }
+        }
+
+        function reloadUserPanel(p){
+            if (typeof(serise_id) != 'undefined' && serise_id != '') {
+                p.form.load({params: {action: 'getSerises', serise_id: serise_id}, waitMsg: 'Loading...' });
+            }
+        }
+
+        var fp = new Ext.FormPanel({
+            url: tturl,
+            method: 'POST',
+            id: 'editserisepanel',
+            trackResetOnLoad: true,
+            frame: true,
+            reader: new Ext.data.JsonReader({
+                    successProperty: 'success',
+                    root : 'serises'
+                },[
+                {name: 'serise_id', type: 'int'},
+                {name: 'serise_name', type: 'string'},
+                {name: 'number_of_groups', type: 'int'},
+                {name: 'group_outlets', type: 'int'},
+                {name: 'top_n', type: 'int'},
+                {name: 'stage', type: 'int'}
+            ]),
+            labelWidth: 70,
+            labelAlign: 'right',
+            defaultType: 'textfield',
+            items: [
+                { fieldLabel: 'ID', xtype: 'hidden', name: 'serise_id', id: 'editseriseid', allowBlank: false, readOnly: true },
+                { fieldLabel: '系列赛名字', name: 'serise_name', allowBlank: false },
+                { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
+                { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
+                { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
+                { fieldLabel: '阶段', xtype: 'combo', id: 'editstagecombo', name: 'stagefake', allowBlank: false, editable: false, typeAhead: false,
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
+                  store: new Ext.data.SimpleStore({
+                         fields:['id', 'type']
+                        ,data:stageTypes}),
+                  displayField: 'type', valueField: 'id', hiddenName: 'stage', value: 0,
+                },
+            ],
+            monitorValid: true,
+            listeners: {
+                clientvalidation: editStageChange
+            },
+            buttonAlign: 'right',
+            buttons: [{
+                text: 'Save', xtype: 'button', id: 'editserisesubmit', type: 'submit', disabled: true,
+                handler: function(){
+                    fp.getForm().submit({
+                        params: {action: 'editSerise'},
+                        success: function(){msgpanel.msg("Serise infomation Saved.",0);  win.close();},
+                        failure: function(conn,resp){
+                            var msg = "Save failed";
+                            if ( resp && resp.result && resp.result.msg) {
+                                msg += ": " + resp.result.msg;
+                            }
+                            msgpanel.msg(msg,2);
+                        }
+                    });
+                }
+            },{
+                text: 'Reset', xtype: 'button', type: 'reset',
+                handler: function(){fp.getForm().reset();}
+            }]
+        });
+
+        var win = new Ext.Window({
+            title: '编辑系列赛',
             width:300,
             modal: true,
             items: [fp]
@@ -518,17 +611,17 @@ TT.app = function() {
                     text: '我的信息',
                     handler: function () { editUserInfo(userid); }
                 },{
-                    text: '积分概览',
-                    handler: showPointList
-                },{
                     text: '记录比赛结果',
                     handler: function () { editMatch(); }
+                },{
+                    text: '积分概览',
+                    handler: showPointList
                 },{
                     text: '增加人员',
                     handler: function () { editUserInfo(); }
                 },{
                     text: '系列赛',
-                    //handler: function () { editUserInfo(); }
+                    handler: function () { editSerise(); }
                 },{
                     text: '链接'
                     // https://www.ratingscentral.com

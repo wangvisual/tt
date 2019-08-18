@@ -318,9 +318,41 @@ sub getMatchInfo() {
     { success=>1, match=>\@match };
 }
 
+sub editSerise() {
+    return { success=>0, msg=>"只有管理员可以编辑系列赛" } if !isAdmin($userid);
+    my $serise_name = get_param('serise_name', '');
+    return { success=>0, msg=>"名字不能为空" } if $serise_name eq '';
+    my $serise_id = get_param('serise_id') || -1;
+    my $number_of_groups = get_param('number_of_groups') || 1;
+    my $group_outlets = get_param('group_outlets') || 1;
+    my $top_n = get_param('top_n') || 1;
+    my $stage = get_param('stage') || 0;
+
+    return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > 2;
+
+    if ( $serise_id > 0 ) {
+        $db->exec('UPDATE SERISES set serise_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=? where serise_id=?;',
+                  [$serise_name, $number_of_groups, $group_outlets, $top_n, $stage, $serise_id], 0);
+    } else {
+        $db->exec('INSERT INTO SERISES(serise_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?);',
+                  [$serise_name, $number_of_groups, $group_outlets, $top_n, $stage], 2);
+        $serise_id = $db->{last_insert_id};
+    }
+    { success=>!$db->{errstr}, msg => "系列赛 $serise_name ($serise_id) 保存成功" };
+}
+
 sub getSerises() {
-    # TODO, 'filter'
-    my @serises = $db->exec('SELECT serise_id, serise_name, number_of_groups, group_outlets, top_n, stage FROM SERISES;', undef, 1);
+    my $serise_id = get_param('serise_id') || -1;
+    my $ongoing = get_param('ongoing', '');
+    my @serises;
+    my $base = 'SELECT serise_id, serise_name, number_of_groups, group_outlets, top_n, stage FROM SERISES';
+    if ( $serise_id > 0 ) {
+        @serises = $db->exec("$base WHERE serise_id=?;", [$serise_id], 1);
+    } elsif ( $ongoing ) {
+        @serises = $db->exec("$base WHERE stage<=?;", [1], 1);
+    } else {
+        @serises = $db->exec("$base;", undef, 1);
+    }
     { success=>!$db->{errstr}, serises=>\@serises };
 }
 
@@ -376,7 +408,7 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSerises);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSerises editSerise);
     if ( $action ) {
         print "Content-Type: text/html; charset=utf-8\n\n";
         if ( $action ~~ @valid_actions ) {
