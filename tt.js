@@ -224,13 +224,13 @@ TT.app = function() {
     };
 
     var editMatch = function(in_match_id) {
-        var setsTypes = new Ext.data.JsonStore({
+        var serisesTypes = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
-            baseParams: {action: 'getSets', filter: 'ongoing'},
+            baseParams: {action: 'getSerises', filter: 'ongoing'},
             autoLoad: true,
-            root: 'sets',
-            fields: ['set_id', 'set_name']
+            root: 'serises',
+            fields: ['serise_id', 'serise_name']
         });
 
         var userList = new Ext.data.JsonStore({
@@ -277,7 +277,7 @@ TT.app = function() {
                     root : 'match'
                 },[
                 {name: 'match_id', type: 'int'},
-                {name: 'set_id', type: 'int'},
+                {name: 'serise_id', type: 'int'},
                 {name: 'date', type: 'date'},
                 {name: 'comment', type: 'string'},
                 {name: 'userid1', type: 'string'},
@@ -303,10 +303,10 @@ TT.app = function() {
             labelAlign: 'right',
             defaultType: 'textfield',
             items: [
-                { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'set_id_fake', allowBlank: false, editable: false, forceSelection: true,
+                { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'serise_id_fake', allowBlank: false, editable: false, forceSelection: true,
                   triggerAction: 'all', mode: 'local',
-                  store: setsTypes,
-                  displayField: 'set_name', valueField: 'set_id', hiddenName: 'set_id'
+                  store: serisesTypes,
+                  displayField: 'serise_name', valueField: 'serise_id', hiddenName: 'serise_id'
                 },
                 { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
                 { layout : "column", xtype: 'container', pack: 'center', defaults: {layout: 'form'}, items: [
@@ -527,7 +527,10 @@ TT.app = function() {
                     text: '增加人员',
                     handler: function () { editUserInfo(); }
                 },{
-                    text: 'Logs'
+                    text: '系列赛',
+                    //handler: function () { editUserInfo(); }
+                },{
+                    text: '链接'
                     // https://www.ratingscentral.com
                 }]
             });

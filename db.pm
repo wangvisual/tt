@@ -45,7 +45,7 @@ sub init_db($self) {
     my $dbh = $self->{dbh};
     # logintype: 0: admin, 1: normal 2: disabled
     $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT '未知', point INTEGER NOT NULL DEFAULT 0)");
-    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, set_id INTEGER, date TEXT not null, comment)");
+    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, serise_id INTEGER, date TEXT not null, comment)");
     # 1, usera, 1600, 1605, 1, 0, 2, 1, userb
     # 1, userb, 1600, 1595, 0, 1, 1, 2, usera
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCHE_DETAILS (match_id INTEGER NOT NULL, userid NOT NULL, point_before INTEGER NOT NULL, point_after INTEGER NOT NULL, "
@@ -58,10 +58,10 @@ sub init_db($self) {
     # 6, 1, 3, userb, 5, 11
     $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     # stage: 0 => enroll, 1 => competition, 2 => end
-    $dbh->do("CREATE TABLE IF NOT EXISTS SETS (set_id INTEGER PRIMARY KEY ASC, set_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERISES (serise_id INTEGER PRIMARY KEY ASC, serise_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
            . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0)");
-    #$dbh->do("CREATE TABLE IF NOT EXISTS SETS_USERS(set_id INTEGER NOT NULL, userid NOT NULL, group INTEGER, PRIMARY KEY (set_id, user_id))");
-    $self->exec("INSERT INTO SETS(set_id,set_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
+    #$dbh->do("CREATE TABLE IF NOT EXISTS SERISE_USERS(serise_id INTEGER NOT NULL, userid NOT NULL, group INTEGER, PRIMARY KEY (serise_id, user_id))");
+    $self->exec("INSERT INTO SERISES(serise_id,serise_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }
 

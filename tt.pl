@@ -192,13 +192,13 @@ sub saveMatch() {
     my $match_id = get_param('match_id') || -1;
     return { success => 0, msg => '非管理员不能修改比赛结果'  } if $match_id > 0 && !isAdmin();
     return { success => 0, msg => '管理员也不能修改比赛结果'  } if $match_id > 0;
-    my $set_id = get_param('set_id') || -1;
+    my $serise_id = get_param('serise_id') || -1;
     my $date = get_param('date', ''); # 2019-08-17
     my $userid1 = get_param('userid1', '');
     my $userid2 = get_param('userid2', '');
-    return { success => 0, msg => '输入信息不正确' } if $set_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
-    my @sets = $db->exec('SELECT set_id, set_name, stage FROM SETS where set_id=? and stage<=?;', [$set_id, 1], 1);
-    return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @sets != 1;
+    return { success => 0, msg => '输入信息不正确' } if $serise_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
+    my @serises = $db->exec('SELECT serise_id, serise_name, stage FROM SERISES where serise_id=? and stage<=?;', [$serise_id, 1], 1);
+    return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @serises != 1;
     my @games; # ( [11, 7], [9, 11] )
     foreach my $i (1..7) {
         $games[$i][0] = get_param("game${i}_point1") || 0;
@@ -217,10 +217,10 @@ sub saveMatch() {
     return { success => 0, msg => '找不到参赛人员' } if $db->{err} || scalar @points != 2;
     my %names;
     my @to;
-    my ($point1, $point2) = ( DEFAULT_POINT, DEFAULT_POINT );
+    my ($point1, $point2);
     foreach (@points) {
-        $point1 = $_->{point} if $_->{userid} eq $userid1;
-        $point2 = $_->{point} if $_->{userid} eq $userid2;
+        $point1 = $_->{point} || DEFAULT_POINT if $_->{userid} eq $userid1;
+        $point2 = $_->{point} || DEFAULT_POINT if $_->{userid} eq $userid2;
         push @to, $_->{email} if $_->{email} =~ /\@/;
         $names{$_->{userid}} = $_->{full_name};
     }
@@ -232,7 +232,7 @@ sub saveMatch() {
     # update DB using transcation
     {
         $db->{dbh}->begin_work;
-        $db->exec("INSERT INTO MATCHES(set_id, date, comment) VALUES(?,?,?);", [$set_id, $date, $comment], 2, 0);
+        $db->exec("INSERT INTO MATCHES(serise_id, date, comment) VALUES(?,?,?);", [$serise_id, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
         last if $db->{err} || $match_id <= 0;
         $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
@@ -282,7 +282,7 @@ sub saveMatch() {
       </style>
     </head>
     <body>
-    <h1>$sets[0]->{set_name} 比赛结果 @ $date</h1>
+    <h1>$serises[0]->{serise_name} 比赛结果 @ $date</h1>
     <p>
         <table>
             <tr><th>参赛人员</th><th>比分</th><th>原积分</th><th>新积分</th><th>积分变动</th></tr>
@@ -299,9 +299,7 @@ sub saveMatch() {
         </table>
     </p>
     <p>$comment</p>
-    <p>
-    请访问<a href='$https://$settings::servername$ENV{REQUEST_URI}'>$settings::title</a>获得详细信息
-    </p>
+    <p> 请访问<a href='$https://$settings::servername$ENV{REQUEST_URI}'>$settings::title</a>获得其它信息</p>
     </body>
 EOT
         send_html_email(join(', ', @to), '新比赛结果出来了', $content);
@@ -313,20 +311,17 @@ EOT
 sub getMatchInfo() {
     my $match_id = get_param('match_id') || -1;
     #return { success=>1, match=>[] } if $match_id < 0;
-    my @match = $db->exec('SELECT m.match_id, m.set_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
+    my @match = $db->exec('SELECT m.match_id, m.serise_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
     my @games = $db->exec('SELECT g.game_id, g.game_number, g.userid, g.win, g.lose FROM GAMES AS g, MATCHES AS m WHERE m.match_id=g.match_id AND m.match_id=?;', [$match_id], 1);
-    #$match[0]->{comment} = 'test';
-    $match[0]->{set_id} = 1;
-    $match[0]->{game1_point1} = 11;
-    $match[0]->{game1_point2} = 7;
-    $match[0]->{date} = '2019-08-13';
+    #$match[0]->{serise_id} = 1;
+    #$match[0]->{date} = '2019-08-13';
     { success=>1, match=>\@match };
 }
 
-sub getSets() {
+sub getSerises() {
     # TODO, 'filter'
-    my @sets = $db->exec('SELECT set_id, set_name, number_of_groups, group_outlets, top_n, stage FROM SETS;', undef, 1);
-    { success=>!$db->{errstr}, sets=>\@sets };
+    my @serises = $db->exec('SELECT serise_id, serise_name, number_of_groups, group_outlets, top_n, stage FROM SERISES;', undef, 1);
+    { success=>!$db->{errstr}, serises=>\@serises };
 }
 
 sub getUserList() {
@@ -381,7 +376,7 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSets);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSerises);
     if ( $action ) {
         print "Content-Type: text/html; charset=utf-8\n\n";
         if ( $action ~~ @valid_actions ) {
