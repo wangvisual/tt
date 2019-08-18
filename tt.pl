@@ -16,6 +16,10 @@ use Data::Dumper;
 use JSON::XS;
 use Net::LDAP;
 
+use constant {
+    DEFAULT_POINT => 1600,
+};
+
 use settings;
 use db;
 
@@ -38,8 +42,8 @@ sub printheader($q) {
                       -expires=>'now',
                     );
     my $analytics = "_uacct='UA-1602647-1';\n_udn='none';\nurchinTracker();\n";
-    my $extblank = "Ext.BLANK_IMAGE_URL = '$imgd/ext/resources/images/default/s.gif';\n";
-    print $q->start_html(-title=>'乒乓球比赛与积分系统',
+    my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\n";
+    print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
                          -author=>'Opera.Wang@Synopsys.com',
                          -head=>Link({-rel=>'SHORTCUT ICON',-type=>'image/x-icon',-href=>"$imgd/tt.png"}),
@@ -50,8 +54,8 @@ sub printheader($q) {
                          -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
                                    {-src=>"$extjs/ext-all.js"},
                                    #{-src=>"$extjs/ext-all-debug.js"},
+                                   {-code=>$js_settings},
                                    {-src=>"tt.js"},
-                                   {-code=>$extblank},
                                   ],
                          -meta=>{'keywords'=>'Table Tennis',
                                 },
@@ -88,9 +92,9 @@ sub getUserInfo($uid = undef) {
     $mesg = $ldap->unbind;
 
     # Save to DB if not in.
-    $db->exec( "INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?);", [$uid, $name, $email, $employeeNumber, 1, 'Other', '0'], 0 );
+    $db->exec( "INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?);", [$uid, $name, $email, $employeeNumber, 1, '未知', '0'], 0 );
 
-    { success=>1, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => 1, gender=> 'Other', point => 0}] };
+    { success=>1, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => 1, gender=> '未知', point => 0}] };
 }
 
 sub getGeneralInfo() {
@@ -103,11 +107,11 @@ sub get_param($name, $default = undef) {
 
 sub isAdmin($id=$userid) {
     my @val = $db->exec('SELECT logintype FROM USERS WHERE userid=?;', [$id], 1);
-    return 0 if $db->{errstr} ne '' || scalar @val == 0;
+    return 0 if $db->{err} || scalar @val == 0;
     return 1 if $val[0]->{logintype} == 0;
     # or there's no admin yet
     my @anyone = $db->exec('SELECT count(logintype) AS c FROM USERS WHERE logintype=?;', [0], 1);
-    return 0 if $db->{errstr} ne '' || scalar @anyone == 0;
+    return 0 if $db->{err} || scalar @anyone == 0;
     !$val[0]->{c};
 }
 
@@ -139,11 +143,11 @@ sub editUser() {
     }
     my $success = 1;
     $db->exec('UPDATE USERS set nick_name=?,cn_name=?,logintype=?,gender=? where userid=?;', [$nick_name, $cn_name, $logintype, $gender, $id], 0);
-    $success = 0 if $db->{errstr} ne '';
+    $success = 0 if $db->{err};
 
     if ( $success && $point > 0 ) {
         $db->exec('UPDATE USERS set point=? where userid=?;', [$point, $id], 0);
-        $success = 0 if $db->{errstr} ne '';
+        $success = 0 if $db->{err};
     }
 
     { success=>$success, msg=>$db->{errstr} };
@@ -152,9 +156,9 @@ sub editUser() {
 sub getPointList() {
     my $fail = { success=>0, users => [] };
     my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
-    return $fail if $db->{errstr} ne '';
+    return $fail if $db->{err};
     my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, userid FROM MATCHE_DETAILS GROUP BY userid;', undef, 1);
-    return $fail if $db->{errstr} ne '';
+    return $fail if $db->{err};
     my $user = {}; # { weiw => { win => 0, fail => 1 } }
     foreach (@win) {
         $user->{$_->{userid}}->{win} = $_->{win};
@@ -167,21 +171,119 @@ sub getPointList() {
     { success=>1, users=>\@users };
 }
 
-sub editMatch() {
+# http://www.ctta.cn/xhgg/zcfg/2017/0621/149168.html
+# 中国乒乓球协会竞赛积分管理办法(试行)
+sub calcPoints($pure_win, $point1 = DEFAULT_POINT, $point2 = DEFAULT_POINT) {
+    my @table = (
+        [12, 8, 8],
+        [37, 7, 10],
+        [62, 6, 13],
+        [87, 5, 16],
+        [112, 4, 20],
+        [137, 3, 25],
+        [162, 2, 30],
+        [187, 2, 35],
+        [212, 1, 40],
+        [237, 1, 45],
+        [1000000, 0, 50],
+    );
+    my $higher_point_win = ($point1 - $point2) * $pure_win > 0 ? 1 : 0;
+    my $diff = abs($point1 - $point2);
+    my $point;
+    foreach (@table) {
+        if ( $diff <= $_->[0] ) {
+            $point = $higher_point_win ? $_->[1] : $_->[2];
+            last;
+        }
+    }
+    $point *= -1 if $pure_win < 0;
+    $point1 += $point;
+    $point2 -= $point;
+    ($point1, $point2);
+}
+
+sub saveMatch() {
+    my $match_id = get_param('match_id') || -1;
+    return { success => 0, msg => '非管理员不能修改比赛结果'  } if $match_id > 0 && !isAdmin();
+    return { success => 0, msg => '管理员也不能修改比赛结果'  } if $match_id > 0;
+    my $set_id = get_param('set_id') || -1;
+    my $date = get_param('date', ''); # 2019-08-17
+    my $userid1 = get_param('userid1', '');
+    my $userid2 = get_param('userid2', '');
+    return { success => 0, msg => '输入信息不正确' } if $set_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
+    my @games; # ( [11, 7], [9, 11] )
+    foreach my $i (1..7) {
+        $games[$i][0] = get_param("game${i}_point1") || 0;
+        $games[$i][1] = get_param("game${i}_point2") || 0;
+    }
+    @games = grep { defined $_ && $_->[0] != $_->[1] } @games;
+    return { success => 0, msg => '没有每局比分' } if !scalar @games;
+    my $win1 = scalar grep { $_->[0] > $_->[1] } @games;
+    my $win2 = scalar @games - $win1;
+    return { success => 0, msg => '分不出胜负' } if $win1 == $win2;
+
+    my $comment = get_param('comment', '');
+
+    # get the old point and calc the new point
+    my @points = $db->exec("SELECT userid, point FROM USERS WHERE userid in (?,?);", [$userid1, $userid2], 1);
+    my ($point1, $point2);
+    foreach (@points) {
+        $point1 = $_->{point} if $_->{userid} eq $userid1;
+        $point2 = $_->{point} if $_->{userid} eq $userid2;
+    }
+    print STDERR "old points:$point1, $point2\n";
+    my ($new_point1, $new_point2) = calcPoints($win1-$win2, $point1, $point2);
+    print STDERR "new points:$new_point1, $new_point2\n";
+    my $win = $win1 - $win2 > 0 ? 1 : 0;
+    my $lose = 1 - $win;
+
+    # update DB using transcation
+    {
+        $db->{dbh}->begin_work;
+        $db->exec("INSERT INTO MATCHES(set_id, date, comment) VALUES(?,?,?);", [$set_id, $date, $comment], 2, 0);
+        $match_id = $db->{last_insert_id};
+        print STDERR "id:$match_id\n";
+        last if $db->{err} || $match_id <= 0;
+        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
+        print STDERR "xx:$db->{err}, $db->{errstr}\n";
+        last if $db->{err};
+        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
+        last if $db->{err};
+        foreach (my $number = 0;  $number < scalar @games; $number++ ) {
+            $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
+                      [$match_id, $number, $userid1, $games[$number]->[0], $games[$number]->[1]], 0, 0);
+            last if $db->{err};
+            $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
+                      [$match_id, $number, $userid2, $games[$number]->[1], $games[$number]->[0]], 0, 0);
+            last if $db->{err};
+        }
+        last if $db->{err};
+        $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point1, $userid1], 0, 0);
+        last if $db->{err};
+        $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point2, $userid2], 0, 0);
+        last if $db->{err};
+        $db->{dbh}->commit();
+    }
+    if ( $db->{err} ) {
+        $db->{dbh}->rollback();
+        return { success => 0, msg => "DB fail: $db->{errstr}" };
+    }
+
+    { success => 1, msg => "$userid1: $point1 => $new_point1, $userid2: $point2 => $new_point2" };
 }
 
 sub getMatchInfo() {
-    my $match_id = get_param('match_id', -1);
-    return { success=>1, match=>[] } if $match_id < 0;
+    my $match_id = get_param('match_id') || -1;
+    #return { success=>1, match=>[] } if $match_id < 0;
     my @match = $db->exec('SELECT m.match_id, m.set_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
-    #$dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     my @games = $db->exec('SELECT g.game_id, g.game_number, g.userid, g.win, g.lose FROM GAMES AS g, MATCHES AS m WHERE m.match_id=g.match_id AND m.match_id=?;', [$match_id], 1);
     #$match[0]->{comment} = 'test';
     $match[0]->{set_id} = 1;
-    #$match[0]->{game1_point1} = 11;
+    $match[0]->{game1_point1} = 11;
     $match[0]->{game1_point2} = 7;
-    #$match[0]->{userid1} = 'weiw';
-    $match[0]->{userid2} = 'yilu';
+    $match[0]->{date} = '2019-08-13';
     { success=>1, match=>\@match };
 }
 
@@ -218,12 +320,14 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo editMatch getSets);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSets);
     if ( $action ) {
         print "Content-Type: text/html; charset=utf-8\n\n";
         if ( $action ~~ @valid_actions ) {
             no strict 'refs';
             print $json->encode(&$action());
+        } else {
+            print $json->encode({success => 0, msg => 'unknown action'});
         }
     } else {
         printheader($q);

@@ -26,7 +26,6 @@ sub new($proto) {
         AutoCommit => 1,
         sqlite_unicode => 1, # for UTF8 strings
     };
-    print STDERR "connecting to $dbfile\n";
     my $dbh = $self->{dbh} = DBI->connect("dbi:SQLite:dbname=$dbfile", "", "", $option) or die "connect DB $dbfile failed: $DBI::errstr";
     $dbh->{LongReadLen} = 1024000;
     $dbh->do("PRAGMA cache_size = -10000"); # default is 2000 for < 3.12, -2000 for >= 3.12, set to negtive number for KBytes, positive number for pages, -10000 is 10M Bytes
@@ -45,17 +44,23 @@ sub new($proto) {
 sub init_db($self) {
     my $dbh = $self->{dbh};
     # logintype: 0: admin, 1: normal 2: disabled
-    $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT 'Other', point INTEGER NOT NULL DEFAULT 0)");
-    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, set_id INTEGER, date DATE not null, comment)");
-    # 1, weiw, 1600, 1605, 1, 0, 2, yilu
-    # 1, yilu, 1600, 1595, 0, 1, 1, weiw
+    $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT '未知', point INTEGER NOT NULL DEFAULT 0)");
+    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, set_id INTEGER, date TEXT not null, comment)");
+    # 1, usera, 1600, 1605, 1, 0, 2, 1, userb
+    # 1, userb, 1600, 1595, 0, 1, 1, 2, usera
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCHE_DETAILS (match_id INTEGER NOT NULL, userid NOT NULL, point_before INTEGER NOT NULL, point_after INTEGER NOT NULL, "
            . "win INTEGER NOT NULL, lose INTEGER NOT NULL, game_win INTEGER NOT NULL, game_lose INTEGER NOT NULL, userid2, PRIMARY KEY (match_id, userid))");
+    # 1, 1, 1, usera, 11, 7
+    # 2, 1, 1, userb, 7, 11
+    # 3, 1, 2, usera, 9, 11
+    # 4, 1, 2, usera, 11, 9
+    # 5, 1, 3, userb, 11, 5
+    # 6, 1, 3, userb, 5, 11
+    $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     # stage: 0 => enroll, 1 => competition, 2 => end
     $dbh->do("CREATE TABLE IF NOT EXISTS SETS (set_id INTEGER PRIMARY KEY ASC, set_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
            . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0)");
     #$dbh->do("CREATE TABLE IF NOT EXISTS SETS_USERS(set_id INTEGER NOT NULL, userid NOT NULL, group INTEGER, PRIMARY KEY (set_id, user_id))");
-    $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     $self->exec("INSERT INTO SETS(set_id,set_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }
@@ -75,19 +80,19 @@ sub disconnect($self) {
     #$self->{dbh}->do("PRAGMA optimize");
     $self->{dbh}->disconnect();
     delete $self->{dbh};
-    print STDERR "disconnectd\n";
     print "disconnectd\n" if $self->{verbose};
 }
 
-sub exec($self, $sql, $input, $needfetch) {
+sub exec($self, $sql, $input, $needfetch, $transcation = 1) {
     $input = [] if !defined $input;
     warn "EXEC: $sql with input: " . join (', ',  $input->@* ) . "\n" if $self->{verbose};
     #print STDERR "EXEC: $sql with input: " . join (', ',  $input->@* ) . "\n";
     my @val;
     my $sth;
     $self->{errstr} = '';
+    $self->{err} = 0;
     eval {
-        $self->{dbh}->begin_work;
+        $self->{dbh}->begin_work if $transcation;
         $sth = $self->{dbh}->prepare( $sql );
         die $DBI::errstr if !defined $sth;
         for (my $i = 0; $i <= scalar $input->@*; $i++ ) {
@@ -99,17 +104,18 @@ sub exec($self, $sql, $input, $needfetch) {
                 push @val, $singlerow;
             }
         }
-        $self->{dbh}->commit();
-        push @val, $sth->last_insert_id("","","","") if $needfetch == 2;
+        $self->{dbh}->commit() if $transcation;
+        $self->{last_insert_id} = $self->{dbh}->last_insert_id("","","","") if $needfetch == 2;
     };
     if ($@) {
         warn "Database error: $sql : $@\n" if $self->{verbose};
         print STDERR "Database error: $sql : $@\n";
         $self->{errstr} = $DBI::errstr || '';
-        $self->{dbh}->rollback();
+        $self->{err} = 1 if $self->{errstr} ne '';
+        $self->{dbh}->rollback() if $transcation;
     }
     $sth->finish() if defined $sth;
-    return @val;
+    @val;
 }
 
 sub execsql($self, $sql, $needfetch) {

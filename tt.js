@@ -6,8 +6,8 @@ TT.app = function() {
     // const
     var perPage = 40;
     var tturl = './';
-    var loginTypes = [ [0, 'Admin'], [1, 'Normal'], [2, 'Disabled'] ];
-    var genderTypes = [ ['Other', 'Other'], ['Male', 'Male'], ['Female', 'Female'] ];
+    var loginTypes = [ [0, '管理员'], [1, '一般用户'], [2, '无效用户'] ];
+    var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
 
     var userid = '';
     var ulds; // UserList Data Store
@@ -62,19 +62,6 @@ TT.app = function() {
         }
     });
 
-    // private functions
-    Ext.apply(Ext.util.Format, {
-        formatMoney: function(v) {
-            return ff(v);
-        },
-        formatBalance: function(v,metadata) {
-            if ( v && v.indexOf('(')!= -1 && metadata ) {
-                metadata.css = 'BalanceHost';
-            }
-            return v;
-        }
-    });
-
     function ff(i, n) {
         if ( typeof(i) == 'string' && '' === i ) {
             return i;
@@ -90,9 +77,25 @@ TT.app = function() {
         return r;
     };
 
+    function formIsDirty(panelid) {
+        var pa = Ext.getCmp(panelid);
+        var dirty = false;
+        function isd(e) {
+            if (e.items) {
+                if ( e.xtype != 'fieldset' || ! e.collapsed ) {
+                    e.items.each(isd);
+                }
+            } else if ( e.isDirty ) {
+                dirty = dirty || e.isDirty();
+            }
+        }
+        isd(pa);
+        return dirty;
+    }
+
     var editUserInfo = function(userid) {
 
-        function editUserChanged(){
+        function editUserChanged(panel, valid){
             var v = Ext.getCmp('editusercombo').getValue();
             var u = Ext.getCmp('edituserid');
             var s = Ext.getCmp('editusersubmit');
@@ -101,21 +104,7 @@ TT.app = function() {
             } else {
                 u.setReadOnly(true);
             }
-            var d = false; // dirty
-            var l = true; // valid
-            var pa = Ext.getCmp('edituserpanel');
-            function isd(e) {
-                if (e.items) {
-                    if ( e.xtype != 'fieldset' || ! e.collapsed ) {
-                        e.items.each(isd);
-                    }
-                } else {
-                    d = d || e.isDirty();
-                    l = l && e.isValid(true);
-                }
-            }
-            isd(pa);
-            if ( d && l ) {
+            if ( valid && formIsDirty('edituserpanel') ) {
                 s.enable();
             } else {
                 s.disable();
@@ -150,8 +139,8 @@ TT.app = function() {
             defaultType: 'textfield',
             items: [
                 { fieldLabel: 'account', name: 'userid', id: 'edituserid', allowBlank: false, readOnly: true },
+                { fieldLabel: '姓名', name: 'cn_name', id: 'editcnname', allowBlank: true },
                 { fieldLabel: '外号', name: 'nick_name', id: 'editnickname', allowBlank: true },
-                { fieldLabel: '中文名', name: 'cn_name', id: 'editcnname', allowBlank: true },
                 { fieldLabel: '类型', xtype: 'combo', id: 'editusercombo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
                   triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
                   store: new Ext.data.SimpleStore({
@@ -166,7 +155,7 @@ TT.app = function() {
                         ,data:genderTypes}),
                   displayField: 'type', valueField: 'id', hiddenName: 'gender'
                 },
-                { fieldLabel: '积分', name: 'point', id: 'editpoint', allowBlank: true }
+                { fieldLabel: '积分', xtype : "numberfield", name: 'point', id: 'editpoint', allowBlank: true }
             ],
             monitorValid: true,
             listeners: {
@@ -253,6 +242,14 @@ TT.app = function() {
             fields: ['userid', 'full_name']
         });
 
+        function editMatchChanged(panel, valid){
+            var s = Ext.getCmp('editmatchsubmit');
+            if ( valid && formIsDirty('editmatchpanel') ) {
+                s.enable();
+            } else {
+                s.disable();
+            }
+        }
 
         function reloadMatchPanel(p){
             p.form.load({params: {action: 'getMatchInfo', match_id: in_match_id}, waitMsg: 'Loading...' });
@@ -286,7 +283,6 @@ TT.app = function() {
                 {name: 'userid1', type: 'string'},
                 {name: 'userid2', type: 'string'},
                 {name: 'game_win', type: 'int'},
-                {name: 'game_win', type: 'int'},
                 {name: 'game_lose', type: 'int'},
                 {name: 'game1_point1', type: 'int'},
                 {name: 'game2_point1', type: 'int'},
@@ -312,6 +308,7 @@ TT.app = function() {
                   store: setsTypes,
                   displayField: 'set_name', valueField: 'set_id', hiddenName: 'set_id'
                 },
+                { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
                 { layout : "column", xtype: 'container', pack: 'center', defaults: {layout: 'form'}, items: [
                     { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: false, forceSelection: true,
                       triggerAction: 'all', mode: 'local',
@@ -330,15 +327,15 @@ TT.app = function() {
             ],
             monitorValid: true,
             listeners: {
-                //clientvalidation: editUserChanged
+                clientvalidation: editMatchChanged
             },
             buttonAlign: 'right',
             buttons: [{
                 text: 'Save', xtype: 'button', id: 'editmatchsubmit', type: 'submit', disabled: true,
                 handler: function(){
                     fp.getForm().submit({
-                        params: {action: 'editMatch'},
-                        success: function(){msgpanel.msg("Match Saved.",0); setupPointList(); win.close();},
+                        params: {action: 'saveMatch'},
+                        success: function(){msgpanel.msg("Match Saved.",0); showPointList(); win.close();},
                         failure: function(conn,resp){
                             var msg = "Save failed";
                             if ( resp && resp.result && resp.result.msg) {
@@ -366,7 +363,7 @@ TT.app = function() {
         win.doLayout();
     };
 
-    var setupPointList = function() {
+    var showPointList = function() {
         var myRecordObj = Ext.data.Record.create([
             {name: 'userid'},
             {name: 'employeeNumber', type: 'int'},
@@ -396,8 +393,8 @@ TT.app = function() {
             {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
             {header: 'employeeNumber', width: 0, dataIndex: 'employeeNumber', hidden: true},
             {header: 'Name', width: 120, sortable: true, dataIndex: 'name'},
-            {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
             {header: '姓名', width: 100, sortable: true, dataIndex: 'cn_name'},
+            {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
             {header: '性别', width: 100, sortable: true, dataIndex: 'gender'},
             {header: '胜', width: 70, sortable: true, dataIndex: 'win'},
             {header: '负', width: 70, sortable: true, dataIndex: 'loose'},
@@ -485,12 +482,12 @@ TT.app = function() {
                 shadow: false,
                 width: 32+2,
                 height: 32+2,
-                html: '<img src="etc/ext/resources/images/default/shared/large-loading.gif" />'
+                html: '<img src="' + extjs_root + '/resources/images/default/shared/large-loading.gif" />'
             });
 
             var infopanel = new Ext.Panel({
                 id: 'infopanel',
-                title: '<center>乒乓球比赛与积分系统</center>',
+                title: '<center>' + title + '</center>',
                 region: 'north',
                 split: false,
                 border: false,
@@ -522,7 +519,7 @@ TT.app = function() {
                     handler: function () { editUserInfo(userid); }
                 },{
                     text: '积分概览',
-                    handler: setupPointList
+                    handler: showPointList
                 },{
                     text: '记录比赛结果',
                     handler: function () { editMatch(); }
@@ -589,7 +586,7 @@ TT.app = function() {
             logpanel.log("OK.");
             msgpanel.msg("Ready.");
             showGeneralInfo();
-            setupPointList();
+            showPointList();
         }
     };
 }();
