@@ -372,7 +372,7 @@ TT.app = function() {
             {name: 'cn_name'},
             {name: 'gender'},
             {name: 'win', type: 'int'},
-            {name: 'loose', type: 'int'},
+            {name: 'lose', type: 'int'},
             {name: 'point', type: 'int', sortDir: 'DESC'}
         ]);
         var myReader = new Ext.data.JsonReader({
@@ -397,7 +397,7 @@ TT.app = function() {
             {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
             {header: '性别', width: 100, sortable: true, dataIndex: 'gender'},
             {header: '胜', width: 70, sortable: true, dataIndex: 'win'},
-            {header: '负', width: 70, sortable: true, dataIndex: 'loose'},
+            {header: '负', width: 70, sortable: true, dataIndex: 'lose'},
             {header: '分数', width: 70, sortable: true, dataIndex: 'point'}
         ]);
 
@@ -505,7 +505,7 @@ TT.app = function() {
             var funcpanel = new Ext.Panel({
                 id: 'funcpanel',
                 defaultType: 'button',
-                title: 'Functions',
+                title: '功能',
                 region: 'west',
                 split: true,
                 border: true,
@@ -524,13 +524,11 @@ TT.app = function() {
                     text: '记录比赛结果',
                     handler: function () { editMatch(); }
                 },{
-                    text: 'New Waste',
-                    //handler: editWaste
-                },{
-                    text: 'New User',
+                    text: '增加人员',
                     handler: function () { editUserInfo(); }
                 },{
                     text: 'Logs'
+                    // https://www.ratingscentral.com
                 }]
             });
 
