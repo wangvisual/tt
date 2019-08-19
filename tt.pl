@@ -200,7 +200,7 @@ sub saveMatch() {
     my $userid1 = get_param('userid1', '');
     my $userid2 = get_param('userid2', '');
     return { success => 0, msg => '输入信息不正确' } if $serise_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
-    my @serises = $db->exec('SELECT serise_id, serise_name, stage FROM SERISES where serise_id=? and stage<=?;', [$serise_id, 1], 1);
+    my @serises = $db->exec('SELECT serise_id, serise_name, stage FROM SERISES where serise_id=? and stage<?;', [$serise_id, 100], 1);
     return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @serises != 1;
     my @games; # ( [11, 7], [9, 11] )
     foreach my $i (1..7) {
@@ -338,7 +338,7 @@ sub editSerise() {
     my $top_n = get_param('top_n') || 1;
     my $stage = get_param('stage') || 0;
 
-    return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > 2;
+    return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > 100;
 
     if ( $serise_id > 0 ) {
         $db->exec('UPDATE SERISES set serise_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=? where serise_id=?;',
@@ -359,7 +359,7 @@ sub getSerises() {
     if ( $serise_id > 0 ) {
         @serises = $db->exec("$base WHERE serise_id=?;", [$serise_id], 1);
     } elsif ( $ongoing ) {
-        @serises = $db->exec("$base WHERE stage<=?;", [1], 1);
+        @serises = $db->exec("$base WHERE stage<?;", [100], 1);
     } else {
         @serises = $db->exec("$base;", undef, 1);
     }

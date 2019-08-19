@@ -7,7 +7,7 @@ TT.app = function() {
     var perPage = 40;
     var tturl = './';
     var loginTypes = [ [0, '管理员'], [1, '一般用户'], [2, '无效用户'] ];
-    var stageTypes = [ [0, '报名'], [1, '比赛中'], [2, '结束'] ];
+    var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [100, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
 
     var userid = '';
