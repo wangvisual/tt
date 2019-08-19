@@ -167,7 +167,7 @@ TT.app = function() {
                 handler: function(){
                     fp.getForm().submit({
                         params: {action: 'editUser'},
-                        success: function(){msgpanel.msg("User infomation Saved.",0); showGeneralInfo(); win.close();},
+                        success: function(){msgpanel.msg("User infomation Saved.",0); showGeneralInfo(); showPointList(); win.close();},
                         failure: function(conn,resp){
                             var msg = "Save failed";
                             if ( resp && resp.result && resp.result.msg) {
@@ -238,7 +238,7 @@ TT.app = function() {
             defaultType: 'textfield',
             items: [
                 { fieldLabel: 'ID', xtype: 'hidden', name: 'serise_id', id: 'editseriseid', allowBlank: false, readOnly: true },
-                { fieldLabel: '系列赛名字', name: 'serise_name', allowBlank: false },
+                { fieldLabel: '系列赛名字', width: 450, name: 'serise_name', allowBlank: false },
                 { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
                 { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
                 { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
@@ -278,7 +278,7 @@ TT.app = function() {
 
         var win = new Ext.Window({
             title: '编辑系列赛',
-            width:300,
+            width:500,
             modal: true,
             items: [fp]
         });
@@ -397,18 +397,18 @@ TT.app = function() {
             defaultType: 'textfield',
             items: [
                 { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'serise_id_fake', allowBlank: false, editable: false, forceSelection: true,
-                  triggerAction: 'all', mode: 'local',
+                  triggerAction: 'all', mode: 'local', width: 500,
                   store: serisesTypes,
                   displayField: 'serise_name', valueField: 'serise_id', hiddenName: 'serise_id'
                 },
                 { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
-                { layout : "column", xtype: 'container', pack: 'center', defaults: {layout: 'form'}, items: [
+                { layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [
                     { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: false, forceSelection: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList,
                       displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1'
                     },
-                    { xtype: 'box', pack: 'center', autoEl: {tag: 'img', src: './etc/tt.png'} },
+                    { xtype: 'box', autoEl: {tag: 'img', width: 48, height: 32, src: './etc/versus.png'} },
                     { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: false, forceSelection: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList,

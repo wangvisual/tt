@@ -38,10 +38,11 @@ my $perPage = 40;
 
 # https://perldoc.perl.org/Encode/MIME/Header.html
 # http://hansekbrand.se/code/UTF8-emails.html
-sub send_html_email($to, $subject, $msg) {
+sub send_html_email($to, $cc, $subject, $msg) {
     my %mail = (
         From             => encode("MIME-Header", $settings::title) . ' <' . ($ENV{SERVER_ADMIN} // 'unknown') . '>',
         To               => $to,
+        Cc               => $cc,
         Subject          => encode("MIME-Header", $subject),
         Message          => encode('utf8', $msg),
         'content-type'   => 'text/html; charset="utf-8"',
@@ -159,6 +160,8 @@ sub getPointList() {
 
 # http://www.ctta.cn/xhgg/zcfg/2017/0621/149168.html
 # 中国乒乓球协会竞赛积分管理办法(试行)
+# http://cntt.sports.cn/sshg/2014hyls/tzgg/2014-08-03/2349855.html
+# 中国乒乓球协会积分赛介绍
 sub calcPoints($pure_win, $point1, $point2) {
     my @table = (
         [12, 8, 8],
@@ -262,6 +265,13 @@ sub saveMatch() {
     }
 
     if ( $settings::mail ) {
+        my $cc = '';
+        if ( $settings::mail >= 2 ) { # CC admin
+            my @admin = $db->exec('SELECT email FROM USERS WHERE logintype=?;', [0], 1);
+            if ( !$db->{err} ) {
+                $cc = join(', ', map {; $_->{email} } @admin);
+            }
+        }
         my $game_details = join("\n", map {; '<tr><td>' . $_->[0] . '</td><td>' . $_->[1] . '</td></tr>'; } @games);
         my $https = ($ENV{HTTPS} // '' ) eq 'ON' ? 'https' : 'http';
         my $content =<<EOT;
@@ -302,7 +312,7 @@ sub saveMatch() {
     <p> 请访问<a href='$https://$settings::servername$ENV{REQUEST_URI}'>$settings::title</a>获得其它信息</p>
     </body>
 EOT
-        send_html_email(join(', ', @to), '新比赛结果出来了', $content);
+        send_html_email(join(', ', @to), $cc, '新比赛结果出来了', $content);
     }
 
     { success => 1, msg => "$userid1: $point1 => $new_point1, $userid2: $point2 => $new_point2" };
