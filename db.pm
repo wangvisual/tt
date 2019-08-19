@@ -64,7 +64,7 @@ sub init_db($self) {
     # If the serise never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
     # 报名: 1, 0, usera, 1600, null
     # 循环赛: 1, 1, usera, 1600, 1
-    $dbh->do("CREATE TABLE IF NOT EXISTS SERISE_USERS(serise_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group INTEGER, PRIMARY KEY (serise_id, stage, user_id))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERISE_USERS(serise_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER, PRIMARY KEY (serise_id, stage, userid))");
     $self->exec("INSERT INTO SERISES(serise_id,serise_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }

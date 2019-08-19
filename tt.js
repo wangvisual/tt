@@ -478,6 +478,7 @@ TT.app = function() {
                         method: 'POST'
                    }),
             baseParams: {action: 'getPointList'},
+            autoLoad: true,
             reader: myReader,
             sortInfo: {field: 'point', direction: 'DESC'}
         });
@@ -508,12 +509,85 @@ TT.app = function() {
             frame: true
         });
 
-        myds.load();
         listpanel.removeAll(true);
         listpanel.add(grid);
         listpanel.doLayout();
+    };
 
-        grid.getSelectionModel().selectFirstRow();
+    var showSerises = function() {
+        var myRecordObj = Ext.data.Record.create([
+            {name: 'serise_id', type: 'int', sortDir: 'ASC'},
+            {name: 'serise_name'},
+            {name: 'number_of_groups', type: 'int'},
+            {name: 'group_outlets', type: 'int'},
+            {name: 'top_n', type: 'int'},
+            {name: 'stage', type: 'int'},
+        ]);
+        var myReader = new Ext.data.JsonReader({
+            root:'serises',
+            id: 'serise_id'
+        }, myRecordObj );
+        var myds = new Ext.data.Store({
+            proxy: new Ext.data.HttpProxy({
+                        url: tturl,
+                        method: 'POST'
+                   }),
+            baseParams: {action: 'getSerises'},
+            autoLoad: true,
+            reader: myReader,
+            sortInfo: {field: 'serise_id', direction: 'ASC'}
+        });
+        var mycm = new Ext.grid.ColumnModel([
+            {header: 'ID', sortable: true, dataIndex: 'serise_id'},
+            {header: '名字', width: 600, sortable: true, dataIndex: 'serise_name'},
+            {header: '小组数', sortable: true, dataIndex: 'number_of_groups'},
+            {header: '出线人数', sortable: true, dataIndex: 'group_outlets'},
+            {header: '取前几名', sortable: true, dataIndex: 'top_n'},
+            {header: '阶段', width: 100, sortable: true, dataIndex: 'stage'},
+        ]);
+
+        var toolbar = new Ext.Toolbar({
+            items:[
+                {
+                    text:"新系列赛",
+                    handler: function(){ editSerise(); }
+                },
+                '-',
+                {
+                    text:"删除系列赛",
+                    handler: function(){ Ext.Msg.alert('错误', '没有实现这个功能'); }
+                },
+                '-',
+            ]
+        });
+        var grid = new Ext.grid.GridPanel({
+            ds: myds,
+            cm: mycm,
+            viewConfig: {
+                forceFit: true
+            },
+            title : '系列赛',
+            id: 'seriselist',
+            autoHeight: true, // or there will be one row less
+            tbar: toolbar,
+            listeners: {
+                'rowdblclick': function(g, rowIndex, e) {
+                    var record = g.getStore().getAt(rowIndex);
+                    var data = record.get('serise_id');
+                    editSerise(data);
+                },
+                'rowclick': function(g, rowIndex, e){
+                    var record = g.getStore().getAt(rowIndex);
+                    var data = record.get('serise_id');
+                },
+            },
+            border: false,
+            frame: true
+        });
+
+        listpanel.removeAll(true);
+        listpanel.add(grid);
+        listpanel.doLayout();
     };
 
     // public space
@@ -621,7 +695,7 @@ TT.app = function() {
                     handler: function () { editUserInfo(); }
                 },{
                     text: '系列赛',
-                    handler: function () { editSerise(); }
+                    handler: showSerises
                 },{
                     text: '链接'
                     // https://www.ratingscentral.com
