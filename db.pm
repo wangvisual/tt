@@ -16,8 +16,6 @@ sub new($proto) {
     my $self = {};
     bless($self, $class);
 
-    $self->{verbose} = $settings::debug && !$ENV{SCRIPT_NAME} && (-t STDIN && -t STDOUT);
-
     my $dbname = $ENV{USER} // $ENV{SERVER_ADMIN} // 'unknown';
     $dbname =~ s/\@.*//;
     my $dbfile = "$RealBin/db/$dbname.db";
@@ -37,7 +35,7 @@ sub new($proto) {
     $self->init_db() if !$dbfile_exists;
     #$self->upgrade_db();
 
-    print "connected:$self->{dbh}\n" if $self->{verbose};
+    warn "connected:$self->{dbh}\n" if $settings::debug;
     return $self;
 }
 
@@ -45,7 +43,7 @@ sub init_db($self) {
     my $dbh = $self->{dbh};
     # logintype: 0: admin, 1: normal 2: disabled
     $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT '未知', point INTEGER NOT NULL DEFAULT 0)");
-    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, serise_id INTEGER, date TEXT not null, comment)");
+    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, siries_id INTEGER, date TEXT not null, comment)");
     # 1, usera, 1600, 1605, 1, 0, 2, 1, userb
     # 1, userb, 1600, 1595, 0, 1, 1, 2, usera
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCHE_DETAILS (match_id INTEGER NOT NULL, userid NOT NULL, point_before INTEGER NOT NULL, point_after INTEGER NOT NULL, "
@@ -58,14 +56,14 @@ sub init_db($self) {
     # 6, 1, 3, userb, 5, 11
     $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     # stage: 0 => enroll, 1 => 循环赛, 2 => 淘汰赛, 100 => end
-    $dbh->do("CREATE TABLE IF NOT EXISTS SERISES (serise_id INTEGER PRIMARY KEY ASC, serise_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES (siries_id INTEGER PRIMARY KEY ASC, siries_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
            . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0)");
-    # When a serise changed from enroll to competition, or 循环赛=>淘汰赛, capture(update) the point snapshot into SERISE_USERS
-    # If the serise never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
+    # When a siries changed from enroll to competition, or 循环赛=>淘汰赛, capture(update) the point snapshot into SERIES_USERS
+    # If the siries never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
     # 报名: 1, 0, usera, 1600, null
     # 循环赛: 1, 1, usera, 1600, 1
-    $dbh->do("CREATE TABLE IF NOT EXISTS SERISE_USERS(serise_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER, PRIMARY KEY (serise_id, stage, userid))");
-    $self->exec("INSERT INTO SERISES(serise_id,serise_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 0, PRIMARY KEY (siries_id, stage, userid))");
+    $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }
 
@@ -84,13 +82,12 @@ sub disconnect($self) {
     #$self->{dbh}->do("PRAGMA optimize");
     $self->{dbh}->disconnect();
     delete $self->{dbh};
-    print "disconnectd\n" if $self->{verbose};
+    warn "disconnectd\n" if $settings::debug;
 }
 
 sub exec($self, $sql, $input, $needfetch, $transcation = 1) {
     $input = [] if !defined $input;
-    warn "EXEC: $sql with input: " . join (', ',  $input->@* ) . "\n" if $self->{verbose};
-    #print STDERR "EXEC: $sql with input: " . join (', ',  $input->@* ) . "\n";
+    warn "EXEC: $sql with input: " . join (', ',  $input->@* ) . "\n" if $settings::debug;
     my @val;
     my $sth;
     $self->{errstr} = '';
@@ -112,13 +109,14 @@ sub exec($self, $sql, $input, $needfetch, $transcation = 1) {
         $self->{last_insert_id} = $self->{dbh}->last_insert_id("","","","") if $needfetch == 2;
     };
     if ($@) {
-        warn "Database error: $sql : $@\n" if $self->{verbose};
+        warn "Database error: $sql : $@\n" if $settings::debug;
         print STDERR "Database error: $sql : $@\n";
         $self->{errstr} = $DBI::errstr || '';
         $self->{err} = 1 if $self->{errstr} ne '';
         $self->{dbh}->rollback() if $transcation;
     }
     $sth->finish() if defined $sth;
+    die "$self->{errstr}, $@\n" if $self->{err} && !$transcation; # eval should be used when transcation is controled by caller
     @val;
 }
 

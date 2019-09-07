@@ -195,15 +195,15 @@ TT.app = function() {
         win.doLayout();
     };
 
-    var editSerise = function(serise_id) {
+    var editSeries = function(siries_id) {
 
         function editStageChange(panel, valid){
-            var u = Ext.getCmp('editseriseid');
-            var s = Ext.getCmp('editserisesubmit');
+            var u = Ext.getCmp('editsiriesid');
+            var s = Ext.getCmp('editseriesubmit');
             if ( u.originalValue == '' ) {
                 u.setDisabled(false);
             }
-            if ( valid && formIsDirty('editserisepanel') ) {
+            if ( valid && formIsDirty('editsiriespanel') ) {
                 s.enable();
             } else {
                 s.disable();
@@ -211,23 +211,23 @@ TT.app = function() {
         }
 
         function reloadUserPanel(p){
-            if (typeof(serise_id) != 'undefined' && serise_id != '') {
-                p.form.load({params: {action: 'getSerises', serise_id: serise_id}, waitMsg: 'Loading...' });
+            if (typeof(siries_id) != 'undefined' && siries_id != '') {
+                p.form.load({params: {action: 'getSeries', siries_id: siries_id}, waitMsg: 'Loading...' });
             }
         }
 
         var fp = new Ext.FormPanel({
             url: tturl,
             method: 'POST',
-            id: 'editserisepanel',
+            id: 'editsiriespanel',
             trackResetOnLoad: true,
             frame: true,
             reader: new Ext.data.JsonReader({
                     successProperty: 'success',
-                    root : 'serises'
+                    root : 'series'
                 },[
-                {name: 'serise_id', type: 'int'},
-                {name: 'serise_name', type: 'string'},
+                {name: 'siries_id', type: 'int'},
+                {name: 'siries_name', type: 'string'},
                 {name: 'number_of_groups', type: 'int'},
                 {name: 'group_outlets', type: 'int'},
                 {name: 'top_n', type: 'int'},
@@ -237,8 +237,8 @@ TT.app = function() {
             labelAlign: 'right',
             defaultType: 'textfield',
             items: [
-                { fieldLabel: 'ID', xtype: 'hidden', name: 'serise_id', id: 'editseriseid', allowBlank: false, readOnly: true },
-                { fieldLabel: '系列赛名字', width: 450, name: 'serise_name', allowBlank: false },
+                { fieldLabel: 'ID', xtype: 'hidden', name: 'siries_id', id: 'editsiriesid', allowBlank: false, readOnly: true },
+                { fieldLabel: '系列赛名字', width: 450, name: 'siries_name', allowBlank: false },
                 { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
                 { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
                 { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
@@ -256,11 +256,11 @@ TT.app = function() {
             },
             buttonAlign: 'right',
             buttons: [{
-                text: 'Save', xtype: 'button', id: 'editserisesubmit', type: 'submit', disabled: true,
+                text: 'Save', xtype: 'button', id: 'editseriesubmit', type: 'submit', disabled: true,
                 handler: function(){
                     fp.getForm().submit({
-                        params: {action: 'editSerise'},
-                        success: function(){msgpanel.msg("Serise infomation Saved.",0);  win.close();},
+                        params: {action: 'editSeries'},
+                        success: function(){msgpanel.msg("Series infomation Saved.",0); showSeries(); win.close();},
                         failure: function(conn,resp){
                             var msg = "Save failed";
                             if ( resp && resp.result && resp.result.msg) {
@@ -317,13 +317,13 @@ TT.app = function() {
     };
 
     var editMatch = function(in_match_id) {
-        var serisesTypes = new Ext.data.JsonStore({
+        var seriesTypes = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
-            baseParams: {action: 'getSerises', filter: 'ongoing'},
+            baseParams: {action: 'getSeries', filter: 'ongoing'},
             autoLoad: true,
-            root: 'serises',
-            fields: ['serise_id', 'serise_name']
+            root: 'series',
+            fields: ['siries_id', 'siries_name']
         });
 
         var userList = new Ext.data.JsonStore({
@@ -345,7 +345,7 @@ TT.app = function() {
         }
 
         function reloadMatchPanel(p){
-            p.form.load({params: {action: 'getMatchInfo', match_id: in_match_id}, waitMsg: 'Loading...' });
+            p.form.load({params: {action: 'editMatch', match_id: in_match_id}, waitMsg: 'Loading...' });
         }
 
         function generateGames() {
@@ -370,7 +370,7 @@ TT.app = function() {
                     root : 'match'
                 },[
                 {name: 'match_id', type: 'int'},
-                {name: 'serise_id', type: 'int'},
+                {name: 'siries_id', type: 'int'},
                 {name: 'date', type: 'date'},
                 {name: 'comment', type: 'string'},
                 {name: 'userid1', type: 'string'},
@@ -396,10 +396,10 @@ TT.app = function() {
             labelAlign: 'right',
             defaultType: 'textfield',
             items: [
-                { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'serise_id_fake', allowBlank: false, editable: false, forceSelection: true,
+                { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'siries_id_fake', allowBlank: false, editable: false, forceSelection: true,
                   triggerAction: 'all', mode: 'local', width: 500,
-                  store: serisesTypes,
-                  displayField: 'serise_name', valueField: 'serise_id', hiddenName: 'serise_id'
+                  store: seriesTypes,
+                  displayField: 'siries_name', valueField: 'siries_id', hiddenName: 'siries_id'
                 },
                 { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
                 { layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [
@@ -408,7 +408,7 @@ TT.app = function() {
                       store: userList,
                       displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1'
                     },
-                    { xtype: 'box', autoEl: {tag: 'img', width: 48, height: 32, src: './etc/versus.png'} },
+                    { xtype: 'box', autoEl: {tag: 'img', width: 48, height: 32, src: 'etc/versus.png'} },
                     { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: false, forceSelection: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList,
@@ -456,7 +456,7 @@ TT.app = function() {
         win.doLayout();
     };
 
-    var showPointList = function() {
+    var showPointList = function(siries_id, siries_name, stage) {
         var myRecordObj = Ext.data.Record.create([
             {name: 'userid'},
             {name: 'employeeNumber', type: 'int'},
@@ -466,23 +466,40 @@ TT.app = function() {
             {name: 'gender'},
             {name: 'win', type: 'int'},
             {name: 'lose', type: 'int'},
+            {name: 'siries', type: 'int'},
             {name: 'point', type: 'int', sortDir: 'DESC'}
         ]);
         var myReader = new Ext.data.JsonReader({
             root:'users',
             id: 'userid'
         }, myRecordObj );
+        var grid;
         var myds = new Ext.data.Store({
             proxy: new Ext.data.HttpProxy({
                         url: tturl,
                         method: 'POST'
-                   }),
-            baseParams: {action: 'getPointList'},
+            }),
+            baseParams: {action: 'getPointList', siries_id: siries_id},
             autoLoad: true,
             reader: myReader,
+            listeners : {
+                'load': function(store, records) {
+                    var selected_records = records.filter(record => record.data.siries > 0);
+                    grid.getSelectionModel().selectRecords(selected_records, false);
+                },
+            },
             sortInfo: {field: 'point', direction: 'DESC'}
         });
+        //FIXME
+        var sm = new Ext.grid.CheckboxSelectionModel({
+            listeners : {
+                'selectionchange': function(s) {
+                    s.getSelections();
+                },
+            },
+        });
         var mycm = new Ext.grid.ColumnModel([
+            //sm,
             new Ext.grid.RowNumberer(),
             {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
             {header: 'employeeNumber', width: 0, dataIndex: 'employeeNumber', hidden: true},
@@ -495,7 +512,7 @@ TT.app = function() {
             {header: '分数', width: 70, sortable: true, dataIndex: 'point'}
         ]);
 
-        var grid = new Ext.grid.GridPanel({
+        grid = new Ext.grid.GridPanel({
             ds: myds,
             cm: mycm,
             viewConfig: {
@@ -504,53 +521,119 @@ TT.app = function() {
             title : '积分概览',
             id: 'pointlist',
             autoHeight: true, // or there will be one row less
-            //listeners: {'dblclick': function(){ editWaste(1); }},
+            listeners: {
+                'rowdblclick': function(g, rowIndex, e) {
+                    var record = g.getStore().getAt(rowIndex);
+                    var data = record.get('userid');
+                    editUserInfo(data);
+                },
+            },
             border: false,
             frame: true
         });
 
-        listpanel.removeAll(true);
-        listpanel.add(grid);
-        listpanel.doLayout();
+        if ( siries_id ) {
+            var fp = new Ext.FormPanel({
+                url: tturl,
+                method: 'POST',
+                id: 'add_user_to_siries_panel',
+                trackResetOnLoad: true,
+                frame: true,
+                labelWidth: 70,
+                labelAlign: 'right',
+                items: [
+                    grid,
+                ],
+                monitorValid: true,
+                buttonAlign: 'right',
+                buttons: [{
+                    text: 'Save', xtype: 'button', id: 'editseriesubmit', type: 'submit', disabled: false,
+                    handler: function(){
+                        fp.getForm().submit({
+                            params: {action: 'editSeriesUser', siries_id: siries_id, stage: stage, users: grid.getSelectionModel().getSelections().map( x => x.data.userid )},
+                            success: function(){msgpanel.msg("Series infomation Saved.",0); win.close();},
+                            failure: function(conn,resp){
+                                var msg = "Save failed";
+                                if ( resp && resp.result && resp.result.msg) {
+                                    msg += ": " + resp.result.msg;
+                                }
+                                msgpanel.msg(msg,2);
+                            }
+                        });
+                    }
+                },{
+                    text: 'Reset', xtype: 'button', type: 'reset',
+                    handler: function(){fp.getForm().reset();}
+                }]
+            });
+
+            var win = new Ext.Window({
+                title: "报名比赛 " + siries_name + ' 按住Ctrl键或Shift键多选',
+                width: 800,
+                modal: true,
+                items: [fp]
+            });
+
+            win.show();
+            win.doLayout();
+        } else {
+            listpanel.removeAll(true);
+            listpanel.add(grid);
+            listpanel.doLayout();
+        }
     };
 
-    var showSerises = function() {
+    var showSeries = function() {
         var myRecordObj = Ext.data.Record.create([
-            {name: 'serise_id', type: 'int', sortDir: 'ASC'},
-            {name: 'serise_name'},
+            {name: 'siries_id', type: 'int', sortDir: 'ASC'},
+            {name: 'siries_name'},
             {name: 'number_of_groups', type: 'int'},
             {name: 'group_outlets', type: 'int'},
             {name: 'top_n', type: 'int'},
             {name: 'stage', type: 'int'},
+            {name: 'enroll', type: 'int'},
         ]);
         var myReader = new Ext.data.JsonReader({
-            root:'serises',
-            id: 'serise_id'
+            root:'series',
+            id: 'siries_id'
         }, myRecordObj );
         var myds = new Ext.data.Store({
             proxy: new Ext.data.HttpProxy({
                         url: tturl,
                         method: 'POST'
                    }),
-            baseParams: {action: 'getSerises'},
+            baseParams: {action: 'getSeries'},
             autoLoad: true,
             reader: myReader,
-            sortInfo: {field: 'serise_id', direction: 'ASC'}
+            sortInfo: {field: 'siries_id', direction: 'ASC'}
         });
         var mycm = new Ext.grid.ColumnModel([
-            {header: 'ID', sortable: true, dataIndex: 'serise_id'},
-            {header: '名字', width: 600, sortable: true, dataIndex: 'serise_name'},
+            {header: 'ID', sortable: true, dataIndex: 'siries_id'},
+            {header: '名字', width: 600, sortable: true, dataIndex: 'siries_name'},
             {header: '小组数', sortable: true, dataIndex: 'number_of_groups'},
             {header: '出线人数', sortable: true, dataIndex: 'group_outlets'},
             {header: '取前几名', sortable: true, dataIndex: 'top_n'},
-            {header: '阶段', width: 100, sortable: true, dataIndex: 'stage'},
+            {header: '阶段', width: 100, sortable: true, dataIndex: 'stage',
+                renderer: function(value) {
+                    var found = stageTypes.find(function(element) {return element[0] == value;});
+                    return found ? found[1] : value;
+                }
+            },
+            {header: '报名人数', sortable: true, dataIndex: 'enroll'},
+            {xtype: 'actioncolumn', header: '报名', items: [{icon   : 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
+                var record = g.getStore().getAt(rowIndex);
+                var siries_id = record.get('siries_id');
+                var siries_name = record.get('siries_name');
+                var stage = record.get('stage');
+                showPointList(siries_id, siries_name, stage);
+            }}]},
         ]);
 
         var toolbar = new Ext.Toolbar({
             items:[
                 {
                     text:"新系列赛",
-                    handler: function(){ editSerise(); }
+                    handler: function(){ editSeries(); }
                 },
                 '-',
                 {
@@ -567,18 +650,14 @@ TT.app = function() {
                 forceFit: true
             },
             title : '系列赛',
-            id: 'seriselist',
+            id: 'sirieslist',
             autoHeight: true, // or there will be one row less
             tbar: toolbar,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     var record = g.getStore().getAt(rowIndex);
-                    var data = record.get('serise_id');
-                    editSerise(data);
-                },
-                'rowclick': function(g, rowIndex, e){
-                    var record = g.getStore().getAt(rowIndex);
-                    var data = record.get('serise_id');
+                    var data = record.get('siries_id');
+                    editSeries(data);
                 },
             },
             border: false,
@@ -695,7 +774,7 @@ TT.app = function() {
                     handler: function () { editUserInfo(); }
                 },{
                     text: '系列赛',
-                    handler: showSerises
+                    handler: showSeries
                 },{
                     text: '链接'
                     // https://www.ratingscentral.com

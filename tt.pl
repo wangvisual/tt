@@ -19,6 +19,7 @@ use Net::LDAP;
 
 use constant {
     DEFAULT_POINT => 1600,
+    STAGE_END => 100,
 };
 
 use settings;
@@ -92,6 +93,12 @@ sub get_param($name, $default = undef) {
     decode('UTF-8', $q->param($name)) // $default;
 }
 
+sub get_multi_param($name, $default = undef) {
+    my @values = map {; decode('UTF-8', $_); } $q->multi_param($name);
+    return $default if defined $default && !scalar @values;
+    \@values;
+}
+
 sub isAdmin($id=$userid) {
     my @val = $db->exec('SELECT logintype FROM USERS WHERE userid=?;', [$id], 1);
     return 0 if $db->{err} || scalar @val == 0;
@@ -141,6 +148,7 @@ sub editUser() {
 }
 
 sub getPointList() {
+    my $siries_id = get_param('siries_id') || 0;
     my $fail = { success=>0, users => [] };
     my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
     return $fail if $db->{err};
@@ -151,9 +159,17 @@ sub getPointList() {
         $user->{$_->{userid}}->{win} = $_->{win};
         $user->{$_->{userid}}->{lose} = $_->{lose};
     }
-    foreach (@users) {
-        $_->{win} = $user->{$_->{userid}}->{win} // 0;
-        $_->{lose} = $user->{$_->{userid}}->{lose} // 0;
+    if ( $siries_id ) {
+        my @siries = $db->exec('SELECT userid FROM SERIES_USERS WHERE siries_id=?;', [$siries_id], 1);
+        return $fail if $db->{err};
+        foreach (@siries) {
+            $user->{$_->{userid}}->{siries} = 1;
+        }
+    }
+    foreach my $p ( qw(win lose siries) ) {
+        foreach (@users) {
+            $_->{$p} = $user->{$_->{userid}}->{$p} // 0;
+        }
     }
     { success=>1, users=>\@users };
 }
@@ -195,13 +211,13 @@ sub saveMatch() {
     my $match_id = get_param('match_id') || -1;
     return { success => 0, msg => '非管理员不能修改比赛结果'  } if $match_id > 0 && !isAdmin();
     return { success => 0, msg => '管理员也不能修改比赛结果'  } if $match_id > 0;
-    my $serise_id = get_param('serise_id') || -1;
+    my $siries_id = get_param('siries_id') || -1;
     my $date = get_param('date', ''); # 2019-08-17
     my $userid1 = get_param('userid1', '');
     my $userid2 = get_param('userid2', '');
-    return { success => 0, msg => '输入信息不正确' } if $serise_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
-    my @serises = $db->exec('SELECT serise_id, serise_name, stage FROM SERISES where serise_id=? and stage<?;', [$serise_id, 100], 1);
-    return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @serises != 1;
+    return { success => 0, msg => '输入信息不正确' } if $siries_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
+    my @series = $db->exec('SELECT siries_id, siries_name, stage FROM SERIES where siries_id=? and stage<?;', [$siries_id, STAGE_END], 1);
+    return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @series != 1;
     my @games; # ( [11, 7], [9, 11] )
     foreach my $i (1..7) {
         $games[$i][0] = get_param("game${i}_point1") || 0;
@@ -227,39 +243,33 @@ sub saveMatch() {
         push @to, $_->{email} if $_->{email} =~ /\@/;
         $names{$_->{userid}} = $_->{full_name};
     }
+    # FIXME use capture point
     my ($new_point1, $new_point2) = calcPoints($win1-$win2, $point1, $point2);
     my ($diff1, $diff2) = ($new_point1 - $point1, $new_point2 - $point2);
     my $win = $win1 - $win2 > 0 ? 1 : 0;
     my $lose = 1 - $win;
 
     # update DB using transcation
-    {
+    eval {
         $db->{dbh}->begin_work;
-        $db->exec("INSERT INTO MATCHES(serise_id, date, comment) VALUES(?,?,?);", [$serise_id, $date, $comment], 2, 0);
+        $db->exec("INSERT INTO MATCHES(siries_id, date, comment) VALUES(?,?,?);", [$siries_id, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
-        last if $db->{err} || $match_id <= 0;
+        die "Invalid siries_id\n" if $match_id <= 0;
         $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
                   [$match_id, $userid1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
-        last if $db->{err};
         $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
                   [$match_id, $userid2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
-        last if $db->{err};
         foreach (my $number = 0;  $number < scalar @games; $number++ ) {
             $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
                       [$match_id, $number, $userid1, $games[$number]->[0], $games[$number]->[1]], 0, 0);
-            last if $db->{err};
             $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
                       [$match_id, $number, $userid2, $games[$number]->[1], $games[$number]->[0]], 0, 0);
-            last if $db->{err};
         }
-        last if $db->{err};
         $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point1, $userid1], 0, 0);
-        last if $db->{err};
         $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point2, $userid2], 0, 0);
-        last if $db->{err};
         $db->{dbh}->commit();
-    }
-    if ( $db->{err} ) {
+    };
+    if ( $@ ) {
         $db->{dbh}->rollback();
         return { success => 0, msg => "DB fail: $db->{errstr}" };
     }
@@ -292,7 +302,7 @@ sub saveMatch() {
       </style>
     </head>
     <body>
-    <h1>$serises[0]->{serise_name} 比赛结果 @ $date</h1>
+    <h1>$series[0]->{siries_name} 比赛结果 @ $date</h1>
     <p>
         <table>
             <tr><th>参赛人员</th><th>比分</th><th>原积分</th><th>新积分</th><th>积分变动</th></tr>
@@ -318,58 +328,141 @@ EOT
     { success => 1, msg => "$userid1: $point1 => $new_point1, $userid2: $point2 => $new_point2" };
 }
 
-sub getMatchInfo() {
+sub editMatch() {
     my $match_id = get_param('match_id') || -1;
-    #return { success=>1, match=>[] } if $match_id < 0;
-    my @match = $db->exec('SELECT m.match_id, m.serise_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
+    return { success=>1, match=>[] } if $match_id < 0;
+    my @match = $db->exec('SELECT m.match_id, m.siries_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
+    # FIXME
     my @games = $db->exec('SELECT g.game_id, g.game_number, g.userid, g.win, g.lose FROM GAMES AS g, MATCHES AS m WHERE m.match_id=g.match_id AND m.match_id=?;', [$match_id], 1);
-    #$match[0]->{serise_id} = 1;
-    #$match[0]->{date} = '2019-08-13';
     { success=>1, match=>\@match };
 }
 
-sub editSerise() {
+sub editSeries() {
     return { success=>0, msg=>"只有管理员可以编辑系列赛" } if !isAdmin($userid);
-    my $serise_name = get_param('serise_name', '');
-    return { success=>0, msg=>"名字不能为空" } if $serise_name eq '';
-    my $serise_id = get_param('serise_id') || -1;
+    my $siries_name = get_param('siries_name', '');
+    return { success=>0, msg=>"名字不能为空" } if $siries_name eq '';
+    my $siries_id = get_param('siries_id') || -1;
     my $number_of_groups = get_param('number_of_groups') || 1;
     my $group_outlets = get_param('group_outlets') || 1;
     my $top_n = get_param('top_n') || 1;
     my $stage = get_param('stage') || 0;
 
-    return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > 100;
+    return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > STAGE_END;
 
-    if ( $serise_id > 0 ) {
-        $db->exec('UPDATE SERISES set serise_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=? where serise_id=?;',
-                  [$serise_name, $number_of_groups, $group_outlets, $top_n, $stage, $serise_id], 0);
-    } else {
-        $db->exec('INSERT INTO SERISES(serise_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?);',
-                  [$serise_name, $number_of_groups, $group_outlets, $top_n, $stage], 2);
-        $serise_id = $db->{last_insert_id};
+    my $need_capture = ( $stage > 0 && $stage < STAGE_END ) ? 1 : 0; # 比赛开始或者进入下个阶段
+    eval {
+        $db->{dbh}->begin_work;
+        if ( $siries_id > 0 ) {
+            my @old_stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
+            my $old = ( !$db->{err} && scalar @old_stage == 1 && defined $old_stage[0]->{stage} ) ? $old_stage[0]->{stage} : -1;
+            $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=? where siries_id=?;',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $siries_id], 0, 0);
+            $need_capture &&= ( $old < $stage ) ? 1 : 0; # eg, 报名结束，进入循环赛
+        } else {
+            $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?);',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage], 2, 0);
+            $siries_id = $db->{last_insert_id};
+        }
+        if ( $need_capture ) {
+            # Get all the users from last stage
+            my @users = $db->exec("SELECT userid FROM SERIES_USERS WHERE siries_id=? AND stage=?;", [$siries_id, $stage -1], 1, 0);
+            my $point = getBasePoint($siries_id, 'users'); # 进入下一阶段，分数以USERS表格中的最新值为新的基准
+            foreach my $uid ( map{; $_->{userid}; } @users ) {
+                # 如果这一阶段已经有了分数，那么就不跟新了，这是为了处理'返回报名又重新比赛'
+                $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point, group_number) VALUES(?,?,?,?,?)',
+                          [$siries_id, $stage, $uid, $point->{$uid} // 0, 0], 0, 0);
+            }
+        }
+        $db->{dbh}->commit();
+    };
+    my $success = !$db->{err};
+    if ($@) {
+        $db->{dbh}->rollback();
+        $success = 0;
     }
-    { success=>!$db->{errstr}, msg => "系列赛 $serise_name ($serise_id) 保存成功" };
+
+    { success => $success, msg => "系列赛 $siries_name (ID:$siries_id) 保存" . ( $success ? "成功" : "失败 => $db->{errstr}, $@" ) };
 }
 
-sub getSerises() {
-    my $serise_id = get_param('serise_id') || -1;
+sub getSeries() {
+    my $siries_id = get_param('siries_id') || -1;
     my $ongoing = get_param('ongoing', '');
-    my @serises;
-    my $base = 'SELECT serise_id, serise_name, number_of_groups, group_outlets, top_n, stage FROM SERISES';
-    if ( $serise_id > 0 ) {
-        @serises = $db->exec("$base WHERE serise_id=?;", [$serise_id], 1);
+    my @series;
+    my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage FROM SERIES';
+    if ( $siries_id > 0 ) {
+        @series = $db->exec("$base WHERE siries_id=?;", [$siries_id], 1);
     } elsif ( $ongoing ) {
-        @serises = $db->exec("$base WHERE stage<?;", [100], 1);
+        @series = $db->exec("$base WHERE stage<?;", [STAGE_END], 1);
     } else {
-        @serises = $db->exec("$base;", undef, 1);
+        @series = $db->exec("$base;", undef, 1);
+        if ( !$db->{error} ) {
+            my @count = $db->exec('SELECT siries_id, count(*) AS enroll FROM SERIES_USERS WHERE stage=? GROUP BY siries_id', [0], 1);
+            if ( !$db->{error} ) {
+                my %c = map {; $_->{siries_id} => $_->{enroll} } @count;
+                foreach ( @series ) {
+                    $_->{enroll} = $c{$_->{siries_id}} // 0;
+                }
+            }
+        };
     }
-    { success=>!$db->{errstr}, serises=>\@serises };
+    { success=>!$db->{error}, series=>\@series };
+}
+
+# NOTE: no transcation mode for this sub
+sub getBasePoint($siries_id, $priorty='users', $users=undef) {
+    my %point; # { usera => point }
+    my @points = $db->exec("SELECT userid, original_point AS point FROM SERIES_USERS WHERE siries_id=? ORDER BY stage DESC;", [$siries_id], 1, 0);
+    foreach (@points) {
+        $point{$_->{userid}} = $_->{point} if !defined $point{$_->{userid}} && $_->{point}; # get the point from last stage
+    }
+    @points = $db->exec("SELECT userid, point FROM USERS;", undef, 1, 0);
+    # FIXME, priority
+    foreach (@points) {
+        $point{$_->{userid}} = $_->{point} if !defined $point{$_->{userid}} && $_->{point}; # fallback to users table
+    }
+    \%point;
+}
+
+sub editSeriesUser {
+    my $siries_id = get_param('siries_id') || -1;
+    my $stage = get_param('stage') // -1;
+    return { success=>0, msg=>"系列赛ID不正确" } if $siries_id <= 0 || $stage < 0;;
+    my $users = {map {; $_ => 1 } get_multi_param('users', [])->@*};
+    my $old_users = {map {; $_->{userid} => 1 } $db->exec('SELECT userid FROM SERIES_USERS WHERE siries_id=?', [$siries_id], 1)};
+    my (@add_users, @delete_users);
+    foreach ( keys $old_users->%* ) {
+        push @delete_users, $_ if !exists $users->{$_};
+    }
+    return { success => 0, msg => "为了防止误操作，每次最多删除两个报名人员" } if scalar @delete_users > 2;
+    foreach ( keys $users->%* ) {
+        push @add_users, $_ if !exists $old_users->{$_};
+    }
+    if ( !isAdmin() && ( scalar @add_users > 1 || scalar @delete_users > 1
+                         || ( scalar @add_users == 1 && $add_users[0] != $userid ) || ( scalar @delete_users == 1 && $delete_users[0] != $userid ) ) ) {
+        return { success => 0, msg => '不能修改别人'  };
+    }
+    eval {
+        $db->{dbh}->begin_work;
+        foreach ( @delete_users ) {
+            $db->exec('DELETE FROM SERIES_USERS WHERE userid=?', [$_], 0, 0); # delete from all stages
+        }
+        my $basePoint = getBasePoint($siries_id, 'users');
+        foreach ( @add_users ) {
+            $db->exec( "INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point) VALUES(?,?,?,?);", [$siries_id, $stage, $_, $basePoint->{$_} // DEFAULT_POINT ], 0, 0 );
+        }
+        $db->{dbh}->commit();
+    };
+    if ( $@ ) {
+        $db->{dbh}->rollback();
+        return { success => 0, msg => "DB fail: $db->{errstr}" };
+    }
+    { success => 1, msg=>"增加了" . scalar @add_users . "个人员，删除了" . scalar @delete_users . "个人员" }
 }
 
 sub getUserList() {
     # TODO, filter
     my @val = $db->exec('SELECT name || ", " || cn_name || ", " || nick_name as full_name, * FROM USERS WHERE logintype<=? ORDER BY userid ASC;', [1], 1);
-    { success=>!$db->{errstr}, users=>\@val };
+    { success=>!$db->{error}, users=>\@val };
 }
 
 sub main_page($q) {
@@ -393,8 +486,7 @@ sub printheader($q) {
                                           ]
                                  },
                          -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
-                                   {-src=>"$extjs/ext-all.js"},
-                                   #{-src=>"$extjs/ext-all-debug.js"},
+                                   {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
                                    {-code=>$js_settings},
                                    {-src=>"tt.js"},
                                   ],
@@ -418,7 +510,7 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatchInfo saveMatch getSerises editSerise);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin editMatch saveMatch getSeries editSeries editSeriesUser);
     if ( $action ) {
         print "Content-Type: text/html; charset=utf-8\n\n";
         if ( $action ~~ @valid_actions ) {
