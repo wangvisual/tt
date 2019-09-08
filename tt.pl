@@ -21,6 +21,7 @@ use constant {
     DEFAULT_POINT => 1600,
     STAGE_END => 100,
 };
+my $stage_name = { 0 => '报名', 1 => '循环赛', 2 => '淘汰赛', &STAGE_END() => '结束' };
 
 use settings;
 use db;
@@ -149,7 +150,7 @@ sub editUser() {
 
 sub getPointList() {
     my $siries_id = get_param('siries_id') || 0;
-    my $stage = get_param('stage') // -1;
+    my $stage = get_param('stage') || 0;
     my $fail = { success=>0, users => [] };
     my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
     return $fail if $db->{err};
@@ -179,7 +180,7 @@ sub getPointList() {
 # 中国乒乓球协会竞赛积分管理办法(试行)
 # http://cntt.sports.cn/sshg/2014hyls/tzgg/2014-08-03/2349855.html
 # 中国乒乓球协会积分赛介绍
-sub calcPoints($pure_win, $point1, $point2) {
+sub calcPoints($pure_win, $point1, $point2, $ref1, $ref2) {
     my @table = (
         [12, 8, 8],
         [37, 7, 10],
@@ -193,8 +194,8 @@ sub calcPoints($pure_win, $point1, $point2) {
         [237, 1, 45],
         [1000000, 0, 50],
     );
-    my $higher_point_win = ($point1 - $point2) * $pure_win > 0 ? 1 : 0;
-    my $diff = abs($point1 - $point2);
+    my $higher_point_win = ($ref1 - $ref2) * $pure_win > 0 ? 1 : 0;
+    my $diff = abs($ref1 - $ref2);
     my $point;
     foreach (@table) {
         if ( $diff <= $_->[0] ) {
@@ -237,23 +238,28 @@ sub editMatch() {
     return { success => 0, msg => '找不到参赛人员' } if $db->{err} || scalar @points != 2;
     my %names;
     my @to;
-    my ($point1, $point2);
+    my ($point1, $point2, $ref1, $ref2);
     foreach (@points) {
         $point1 = $_->{point} || DEFAULT_POINT if $_->{userid} eq $userid1;
         $point2 = $_->{point} || DEFAULT_POINT if $_->{userid} eq $userid2;
         push @to, $_->{email} if $_->{email} =~ /\@/;
         $names{$_->{userid}} = $_->{full_name};
     }
-    # FIXME use capture point
-    my ($new_point1, $new_point2) = calcPoints($win1-$win2, $point1, $point2);
+    # 自由约战使用当前积分作为参考分，其它比赛使用快照积分
+    my $basePoint = getBasePoint($siries_id, $siries_id == 1 ? 'users' : 'capture');
+    $ref1 = $basePoint->{$userid1} || $point1;
+    $ref2 = $basePoint->{$userid2} || $point2;
+    my ($new_point1, $new_point2) = calcPoints($win1-$win2, $point1, $point2, $ref1, $ref2);
     my ($diff1, $diff2) = ($new_point1 - $point1, $new_point2 - $point2);
     my $win = $win1 - $win2 > 0 ? 1 : 0;
     my $lose = 1 - $win;
 
+    # FIXME, use real stage and group
+    my $stage = $siries_id == 1 ? 0 : 1; my $group_number = 1;
     # update DB using transcation
     eval {
         $db->{dbh}->begin_work;
-        $db->exec("INSERT INTO MATCHES(siries_id, date, comment) VALUES(?,?,?);", [$siries_id, $date, $comment], 2, 0);
+        $db->exec("INSERT INTO MATCHES(siries_id, stage, group_number, date, comment) VALUES(?,?,?,?,?);", [$siries_id, $stage, $group_number, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
         die "Invalid siries_id\n" if $match_id <= 0;
         $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
@@ -268,6 +274,11 @@ sub editMatch() {
         }
         $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point1, $userid1], 0, 0);
         $db->exec('UPDATE USERS set point=? where userid=?;', [$new_point2, $userid2], 0, 0);
+        # User may not enroll yet, add it now
+        $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point, group_number) VALUES(?,?,?,?,?)',
+                  [$siries_id, $stage, $userid1, $ref1, $group_number], 0, 0);
+        $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point, group_number) VALUES(?,?,?,?,?)',
+                  [$siries_id, $stage, $userid2, $ref2, $group_number], 0, 0);
         $db->{dbh}->commit();
     };
     if ( $@ ) {
@@ -303,12 +314,13 @@ sub editMatch() {
       </style>
     </head>
     <body>
-    <h1>$series[0]->{siries_name} 比赛结果 @ $date</h1>
+    <h1>$series[0]->{siries_name}</h1>
+    <h2>$stage_name->{$stage}阶段 第${group_number}组 比赛结果 @ $date</h2>
     <p>
         <table>
-            <tr><th>参赛人员</th><th>比分</th><th>原积分</th><th>新积分</th><th>积分变动</th></tr>
-            <tr><td>$names{$userid1}</td><td>$win1</td><td>$point1</td><td>$new_point1</td><td>$diff1</td></tr>
-            <tr><td>$names{$userid2}</td><td>$win2</td><td>$point2</td><td>$new_point2</td><td>$diff2</td></tr>
+            <tr><th>参赛人员</th><th>比分</th><th>参考积分</th><th>原积分</th><th>新积分</th><th>积分变动</th></tr>
+            <tr><td>$names{$userid1}</td><td>$win1</td><td>$ref1</td><td>$point1</td><td>$new_point1</td><td>$diff1</td></tr>
+            <tr><td>$names{$userid2}</td><td>$win2</td><td>$ref2</td><td>$point2</td><td>$new_point2</td><td>$diff2</td></tr>
         </table>
     </p>
     <p></p>
@@ -323,6 +335,10 @@ sub editMatch() {
     <p> 请访问<a href='$https://$settings::servername$ENV{REQUEST_URI}'>$settings::title</a>获得其它信息</p>
     </body>
 EOT
+        if ( $settings::mail =~ /@/ ) {
+            @to = split(/[,;]/, $settings::mail);
+            $cc = '';
+        }
         send_html_email(join(', ', @to), $cc, '新比赛结果出来了', $content);
     }
 
@@ -343,6 +359,7 @@ sub editSeries() {
     my $siries_name = get_param('siries_name', '');
     return { success=>0, msg=>"名字不能为空" } if $siries_name eq '';
     my $siries_id = get_param('siries_id') || -1;
+    return { success=>0, msg=>"自由约战是系统比赛，不可更改" } if $siries_id <= 1;
     my $number_of_groups = get_param('number_of_groups') || 1;
     my $group_outlets = get_param('group_outlets') || 1;
     my $top_n = get_param('top_n') || 1;
@@ -371,7 +388,7 @@ sub editSeries() {
             foreach my $uid ( map{; $_->{userid}; } @users ) {
                 # 如果这一阶段已经有了分数，那么就不跟新了，这是为了处理'返回报名又重新比赛'
                 $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point, group_number) VALUES(?,?,?,?,?)',
-                          [$siries_id, $stage, $uid, $point->{$uid} // 0, 0], 0, 0);
+                          [$siries_id, $stage, $uid, $point->{$uid} // 0, 1], 0, 0);
             }
         }
         $db->{dbh}->commit();
@@ -415,16 +432,15 @@ sub getSeries() {
 }
 
 # NOTE: no transcation mode for this sub
-sub getBasePoint($siries_id, $priorty='users', $users=undef) {
+sub getBasePoint($siries_id, $priorty='users') {
     my %point; # { usera => point }
     my @points = $db->exec("SELECT userid, original_point AS point FROM SERIES_USERS WHERE siries_id=? ORDER BY stage DESC;", [$siries_id], 1, 0);
     foreach (@points) {
-        $point{$_->{userid}} = $_->{point} if !defined $point{$_->{userid}} && $_->{point}; # get the point from last stage
+        $point{$_->{userid}} = $_->{point} if !defined $point{$_->{userid}} && $_->{point}; # get the point from latest stage
     }
     @points = $db->exec("SELECT userid, point FROM USERS;", undef, 1, 0);
-    # FIXME, priority
     foreach (@points) {
-        $point{$_->{userid}} = $_->{point} if !defined $point{$_->{userid}} && $_->{point}; # fallback to users table
+        $point{$_->{userid}} = $_->{point} if ( $priorty eq 'users' || !defined $point{$_->{userid}} ) && $_->{point};
     }
     \%point;
 }

@@ -465,6 +465,7 @@ TT.app = function() {
             id: 'userid'
         }, myRecordObj );
         var grid;
+        var original_records;
         var myds = new Ext.data.Store({
             proxy: new Ext.data.HttpProxy({
                         url: tturl,
@@ -475,22 +476,13 @@ TT.app = function() {
             reader: myReader,
             listeners : {
                 'load': function(store, records) {
-                    var selected_records = records.filter(record => record.data.siries > 0);
-                    grid.getSelectionModel().selectRecords(selected_records, false);
+                    original_records = records.filter(record => record.data.siries > 0);
+                    grid.getSelectionModel().selectRecords(original_records, false);
                 },
             },
             sortInfo: {field: 'point', direction: 'DESC'}
         });
-        //FIXME
-        var sm = new Ext.grid.CheckboxSelectionModel({
-            listeners : {
-                'selectionchange': function(s) {
-                    s.getSelections();
-                },
-            },
-        });
         var mycm = new Ext.grid.ColumnModel([
-            //sm,
             new Ext.grid.RowNumberer(),
             {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
             {header: 'employeeNumber', width: 0, dataIndex: 'employeeNumber', hidden: true},
@@ -524,6 +516,28 @@ TT.app = function() {
         });
 
         if ( siries_id ) {
+            grid.getSelectionModel().on({
+                'selectionchange': {
+                    fn: function() {
+                        var s = Ext.getCmp('add_user_to_siries_submit');
+                        if ( s ) {
+                            var current = grid.getSelectionModel().getSelections();
+                            if ( current.length != original_records.length ) {
+                                return s.enable();
+                            }
+                            var original_users = new Object;;
+                            original_records.map( x => original_users[x.data.userid] = 1 );
+                            for ( var i = current.length - 1; i >= 0; i-- ) {
+                                if ( !original_users[current[i].data.userid] ) {
+                                    return s.enable();
+                                }
+                            }
+                            s.disable();
+                        }
+                    },
+                    scope: this,
+                    delay: 0
+            }});
             var fp = new Ext.FormPanel({
                 url: tturl,
                 method: 'POST',
@@ -538,7 +552,7 @@ TT.app = function() {
                 monitorValid: true,
                 buttonAlign: 'right',
                 buttons: [{
-                    text: 'Save', xtype: 'button', id: 'editseriesubmit', type: 'submit', disabled: false,
+                    text: 'Save', xtype: 'button', id: 'add_user_to_siries_submit', type: 'submit', disabled: true,
                     handler: function(){
                         fp.getForm().submit({
                             params: {action: 'editSeriesUser', siries_id: siries_id, stage: stage, users: grid.getSelectionModel().getSelections().map( x => x.data.userid )},
@@ -548,7 +562,7 @@ TT.app = function() {
                     }
                 },{
                     text: 'Reset', xtype: 'button', type: 'reset',
-                    handler: function(){fp.getForm().reset();}
+                    handler: function() { grid.getSelectionModel().selectRecords(original_records, false); },
                 }]
             });
 
@@ -754,7 +768,7 @@ TT.app = function() {
                     handler: function () { editMatch(); }
                 },{
                     text: '积分概览',
-                    handler: showPointList
+                    handler: function () { showPointList(); }
                 },{
                     text: '增加人员',
                     handler: function () { editUserInfo(); }

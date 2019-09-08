@@ -42,7 +42,7 @@ sub init_db($self) {
     my $dbh = $self->{dbh};
     # logintype: 0: admin, 1: normal 2: disabled
     $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT '未知', point INTEGER NOT NULL DEFAULT 0)");
-    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, siries_id INTEGER, date TEXT not null, comment)");
+    $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, siries_id INTEGER, stage INTEGER NOT NULL DEFAULT 1, group_number INTEGER DEFAULT 1, date TEXT not null, comment)");
     # 1, usera, 1600, 1605, 1, 0, 2, 1, userb
     # 1, userb, 1600, 1595, 0, 1, 1, 2, usera
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCHE_DETAILS (match_id INTEGER NOT NULL, userid NOT NULL, point_before INTEGER NOT NULL, point_after INTEGER NOT NULL, "
@@ -61,7 +61,7 @@ sub init_db($self) {
     # If the siries never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
     # 报名: 1, 0, usera, 1600, null
     # 循环赛: 1, 1, usera, 1600, 1
-    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 0, PRIMARY KEY (siries_id, stage, userid))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 1, PRIMARY KEY (siries_id, stage, userid))");
     $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 0], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }
