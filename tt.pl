@@ -262,10 +262,10 @@ sub editMatch() {
         $db->exec("INSERT INTO MATCHES(siries_id, stage, group_number, date, comment) VALUES(?,?,?,?,?);", [$siries_id, $stage, $group_number, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
         die "Invalid siries_id\n" if $match_id <= 0;
-        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
-                  [$match_id, $userid1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
-        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?);",
-                  [$match_id, $userid2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
+        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid1, $ref1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
+        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid2, $ref2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
         foreach (my $number = 0;  $number < scalar @games; $number++ ) {
             $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
                       [$match_id, $number, $userid1, $games[$number]->[0], $games[$number]->[1]], 0, 0);
