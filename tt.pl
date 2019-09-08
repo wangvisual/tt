@@ -359,7 +359,7 @@ sub editSeries() {
     my $siries_name = get_param('siries_name', '');
     return { success=>0, msg=>"名字不能为空" } if $siries_name eq '';
     my $siries_id = get_param('siries_id') || -1;
-    return { success=>0, msg=>"自由约战是系统比赛，不可更改" } if $siries_id <= 1;
+    return { success=>0, msg=>"自由约战是系统比赛，不可更改" } if $siries_id == 1;
     my $number_of_groups = get_param('number_of_groups') || 1;
     my $group_outlets = get_param('group_outlets') || 1;
     my $top_n = get_param('top_n') || 1;
