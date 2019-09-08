@@ -63,6 +63,15 @@ TT.app = function() {
         }
     });
 
+    function results(form, action) {
+        var success = action && action.result && action.result.success ? 1 : 0;
+        var msg = "保存" + (success ? '成功' : '失败');
+        if ( action && action.result && action.result.msg) {
+            msg += ": " + action.result.msg;
+        }
+        msgpanel.msg(msg, success);
+    }
+
     function ff(i, n) {
         if ( typeof(i) == 'string' && '' === i ) {
             return i;
@@ -167,14 +176,8 @@ TT.app = function() {
                 handler: function(){
                     fp.getForm().submit({
                         params: {action: 'editUser'},
-                        success: function(){msgpanel.msg("User infomation Saved.",0); showGeneralInfo(); showPointList(); win.close();},
-                        failure: function(conn,resp){
-                            var msg = "Save failed";
-                            if ( resp && resp.result && resp.result.msg) {
-                                msg += ": " + resp.result.msg;
-                            }
-                            msgpanel.msg(msg,2);
-                        }
+                        success: function(...args) {results(...args); showGeneralInfo(); showPointList(); win.close();},
+                        failure: results,
                     });
                 }
             },{
@@ -260,14 +263,8 @@ TT.app = function() {
                 handler: function(){
                     fp.getForm().submit({
                         params: {action: 'editSeries'},
-                        success: function(){msgpanel.msg("Series infomation Saved.",0); showSeries(); win.close();},
-                        failure: function(conn,resp){
-                            var msg = "Save failed";
-                            if ( resp && resp.result && resp.result.msg) {
-                                msg += ": " + resp.result.msg;
-                            }
-                            msgpanel.msg(msg,2);
-                        }
+                        success: function(...args) {results(...args); showSeries(); win.close();},
+                        failure: results,
                     });
                 }
             },{
@@ -345,7 +342,7 @@ TT.app = function() {
         }
 
         function reloadMatchPanel(p){
-            p.form.load({params: {action: 'editMatch', match_id: in_match_id}, waitMsg: 'Loading...' });
+            p.form.load({params: {action: 'getMatch', match_id: in_match_id}, waitMsg: 'Loading...' });
         }
 
         function generateGames() {
@@ -427,15 +424,9 @@ TT.app = function() {
                 text: 'Save', xtype: 'button', id: 'editmatchsubmit', type: 'submit', disabled: true,
                 handler: function(){
                     fp.getForm().submit({
-                        params: {action: 'saveMatch'},
-                        success: function(){msgpanel.msg("Match Saved.",0); showPointList(); win.close();},
-                        failure: function(conn,resp){
-                            var msg = "Save failed";
-                            if ( resp && resp.result && resp.result.msg) {
-                                msg += ": " + resp.result.msg;
-                            }
-                            msgpanel.msg(msg,2);
-                        }
+                        params: {action: 'editMatch'},
+                        success: function(...args) {results(...args); showGeneralInfo(); showPointList(); win.close();},
+                        failure: results,
                     });
                 }
             },{
@@ -479,7 +470,7 @@ TT.app = function() {
                         url: tturl,
                         method: 'POST'
             }),
-            baseParams: {action: 'getPointList', siries_id: siries_id},
+            baseParams: {action: 'getPointList', siries_id: siries_id, stage: stage},
             autoLoad: true,
             reader: myReader,
             listeners : {
@@ -551,14 +542,8 @@ TT.app = function() {
                     handler: function(){
                         fp.getForm().submit({
                             params: {action: 'editSeriesUser', siries_id: siries_id, stage: stage, users: grid.getSelectionModel().getSelections().map( x => x.data.userid )},
-                            success: function(){msgpanel.msg("Series infomation Saved.",0); win.close();},
-                            failure: function(conn,resp){
-                                var msg = "Save failed";
-                                if ( resp && resp.result && resp.result.msg) {
-                                    msg += ": " + resp.result.msg;
-                                }
-                                msgpanel.msg(msg,2);
-                            }
+                            success: function(...args) {results(...args); showSeries(); win.close();},
+                            failure: results,
                         });
                     }
                 },{
@@ -592,6 +577,7 @@ TT.app = function() {
             {name: 'top_n', type: 'int'},
             {name: 'stage', type: 'int'},
             {name: 'enroll', type: 'int'},
+            {name: 'count', type: 'int'},
         ]);
         var myReader = new Ext.data.JsonReader({
             root:'series',
@@ -617,9 +603,9 @@ TT.app = function() {
                 renderer: function(value) {
                     var found = stageTypes.find(function(element) {return element[0] == value;});
                     return found ? found[1] : value;
-                }
-            },
+            }},
             {header: '报名人数', sortable: true, dataIndex: 'enroll'},
+            {header: '当前阶段人数', sortable: true, dataIndex: 'count'},
             {xtype: 'actioncolumn', header: '报名', items: [{icon   : 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
                 var siries_id = record.get('siries_id');

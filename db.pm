@@ -35,7 +35,6 @@ sub new($proto) {
     $self->init_db() if !$dbfile_exists;
     #$self->upgrade_db();
 
-    warn "connected:$self->{dbh}\n" if $settings::debug;
     return $self;
 }
 
@@ -82,7 +81,6 @@ sub disconnect($self) {
     #$self->{dbh}->do("PRAGMA optimize");
     $self->{dbh}->disconnect();
     delete $self->{dbh};
-    warn "disconnectd\n" if $settings::debug;
 }
 
 sub exec($self, $sql, $input, $needfetch, $transcation = 1) {
