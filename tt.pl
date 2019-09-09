@@ -154,7 +154,7 @@ sub getPointList() {
     my $fail = { success=>0, users => [] };
     my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
     return $fail if $db->{err};
-    my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, userid FROM MATCHE_DETAILS GROUP BY userid;', undef, 1);
+    my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
     return $fail if $db->{err};
     my $user = {}; # { weiw => { win => 0, fail => 1 } }
     foreach (@win) {
@@ -262,9 +262,9 @@ sub editMatch() {
         $db->exec("INSERT INTO MATCHES(siries_id, stage, group_number, date, comment) VALUES(?,?,?,?,?);", [$siries_id, $stage, $group_number, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
         die "Invalid siries_id\n" if $match_id <= 0;
-        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
                   [$match_id, $userid1, $ref1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
-        $db->exec("INSERT INTO MATCHE_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
                   [$match_id, $userid2, $ref2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
         foreach (my $number = 0;  $number < scalar @games; $number++ ) {
             $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
@@ -348,7 +348,7 @@ EOT
 sub getMatch() {
     my $match_id = get_param('match_id') || -1;
     return { success=>1, match=>[] } if $match_id < 0;
-    my @match = $db->exec('SELECT m.match_id, m.siries_id, m.date, m.comment FROM MATCHES AS m, MATCHE_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
+    my @match = $db->exec('SELECT m.match_id, m.siries_id, m.date, m.comment FROM MATCHES AS m, MATCH_DETAILS AS d WHERE m.match_id=d.match_id AND m.match_id=? AND d.win=?;', [$match_id, 1], 1);
     # FIXME
     my @games = $db->exec('SELECT g.game_id, g.game_number, g.userid, g.win, g.lose FROM GAMES AS g, MATCHES AS m WHERE m.match_id=g.match_id AND m.match_id=?;', [$match_id], 1);
     { success=>1, match=>\@match };
