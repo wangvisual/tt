@@ -319,6 +319,7 @@ TT.app = function() {
             method: 'POST',
             baseParams: {action: 'getSeries', filter: 'ongoing'},
             autoLoad: true,
+            autoDestroy: true,
             root: 'series',
             fields: ['siries_id', 'siries_name']
         });
@@ -328,6 +329,7 @@ TT.app = function() {
             method: 'POST',
             baseParams: {action: 'getUserList', filter: 'valid'},
             autoLoad: true,
+            autoDestroy: true,
             root: 'users',
             fields: ['userid', 'full_name']
         });
@@ -425,7 +427,7 @@ TT.app = function() {
                 handler: function(){
                     fp.getForm().submit({
                         params: {action: 'editMatch'},
-                        success: function(...args) {results(...args); showGeneralInfo(); showPointList(); win.close();},
+                        success: function(...args) {results(...args); showGeneralInfo(); showMatches(); win.close();},
                         failure: results,
                     });
                 }
@@ -473,6 +475,7 @@ TT.app = function() {
             }),
             baseParams: {action: 'getPointList', siries_id: siries_id, stage: stage},
             autoLoad: true,
+            autoDestroy: true,
             reader: myReader,
             listeners : {
                 'load': function(store, records) {
@@ -503,7 +506,7 @@ TT.app = function() {
             },
             title : '积分概览',
             id: 'pointlist',
-            autoHeight: true, // or there will be one row less
+            autoHeight: true,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     var record = g.getStore().getAt(rowIndex);
@@ -604,6 +607,7 @@ TT.app = function() {
                    }),
             baseParams: {action: 'getSeries'},
             autoLoad: true,
+            autoDestroy: true,
             reader: myReader,
             sortInfo: {field: 'siries_id', direction: 'ASC'}
         });
@@ -651,7 +655,7 @@ TT.app = function() {
             },
             title : '系列赛',
             id: 'sirieslist',
-            autoHeight: true, // or there will be one row less
+            autoHeight: true,
             tbar: toolbar,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
@@ -669,10 +673,90 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
+    var showMatches = function() {
+        var myReader = new Ext.data.JsonReader({
+            root:'matches',
+            id: 'match_id',
+            fields: [
+                {name: 'match_id', type: 'int'},
+                {name: 'game_win', type: 'int'},
+                {name: 'game_lose', type: 'int'},
+                {name: 'full_name'},
+                {name: 'point_ref', type: 'int'},
+                {name: 'point_before', type: 'int'},
+                {name: 'point_after', type: 'int'},
+                {name: 'full_name2'},
+                {name: 'point_ref2', type: 'int'},
+                {name: 'point_before2', type: 'int'},
+                {name: 'point_after2', type: 'int'},
+                {name: 'games'},
+                {name: 'comment'},
+                {name: 'siries_name'},
+                {name: 'date'},
+                {name: 'stage', type: 'int'},
+            ],
+        });
+        var myds = new Ext.data.GroupingStore({
+            proxy: new Ext.data.HttpProxy({
+                        url: tturl,
+                        method: 'POST'
+                   }),
+            baseParams: {action: 'getMatches'},
+            autoLoad: true,
+            autoDestroy: true,
+            reader: myReader,
+            sortInfo: {field: 'date', direction: 'DESC'},
+            groupField: 'siries_name',
+        });
+        var mycm = new Ext.grid.ColumnModel([
+            new Ext.grid.RowNumberer(),
+            {header: '比赛日期', sortable: true, dataIndex: 'date'},
+            {header: '选手1', sortable: true, dataIndex: 'full_name'},
+            {header: '比分', sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
+                var game_win = record.get('game_win');
+                var game_lose = record.get('game_lose');
+                return game_win + ":" + game_lose;
+            }},
+            {header: '选手2', sortable: true, dataIndex: 'full_name2'},
+            {header: '局分', sortable: true, dataIndex: 'games', renderer: function(value) {
+                return value.map( x => x.win + ":" + x.lose ).join(', ');
+            }},
+            {header: '赛事', sortable: true, dataIndex: 'siries_name'},
+        ]);
+
+        var toolbar = new Ext.Toolbar({
+            items:[
+                {
+                    text:"记录比赛结果",
+                    handler: function(){ editMatch(); }
+                },
+                '-',
+            ]
+        });
+        var grid = new Ext.grid.GridPanel({
+            ds: myds,
+            cm: mycm,
+            viewConfig: {
+                forceFit: true
+            },
+            title : '比赛结果',
+            id: 'matcheslist',
+            autoHeight: true,
+            tbar: toolbar,
+            view: new Ext.grid.GroupingView({
+                forceFit: true,
+                groupTextTpl: '{text} ({[values.rs.length]} {["项"]})'
+            }),
+            border: false,
+            frame: true
+        });
+
+        listpanel.removeAll(true);
+        listpanel.add(grid);
+        listpanel.doLayout();
+    };
     // public space
     return {
-        // public properties
-
         // public methods
         logAjaxStart: function(conn, options) {
             spinner.setPosition(0,0);
@@ -764,11 +848,11 @@ TT.app = function() {
                     text: '我的信息',
                     handler: function () { editUserInfo(userid); }
                 },{
-                    text: '记录比赛结果',
-                    handler: function () { editMatch(); }
-                },{
                     text: '积分概览',
                     handler: function () { showPointList(); }
+                },{
+                    text: '比赛结果',
+                    handler: function () { showMatches(); }
                 },{
                     text: '增加人员',
                     handler: function () { editUserInfo(); }
@@ -803,6 +887,7 @@ TT.app = function() {
 
             listpanel = new Ext.Panel({
                 id: 'listpanel',
+                autoScroll: true,
                 region: 'center',
                 split: true,
                 border: true

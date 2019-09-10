@@ -30,11 +30,6 @@ my $imgd = 'etc';
 my $extjs = 'https://cdnjs.cloudflare.com/ajax/libs/extjs/3.4.1-1';
 
 my $userid = '';
-# we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
-# https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
-# JSON->new->utf8(1)->decode, input must be UTF-8
-# JSON->new->utf8(0)->decode, input must be Unicode chars
-my $json = JSON::XS->new->utf8(0)->space_after->relaxed->allow_nonref;
 my ($q,$db);
 my $perPage = 40;
 
@@ -339,7 +334,7 @@ EOT
             @to = split(/[,;]/, $settings::mail);
             $cc = '';
         }
-        send_html_email(join(', ', @to), $cc, '新比赛结果出来了', $content);
+        send_html_email(join(', ', @to), $cc, "新比赛结果出来了 $names{$userid1} V.S. $names{$userid2} $win1:$win2", $content);
     }
 
     { success => 1, msg => "$userid1: $point1 => $new_point1, $userid2: $point2 => $new_point2" };
@@ -352,6 +347,45 @@ sub getMatch() {
     # FIXME
     my @games = $db->exec('SELECT g.game_id, g.game_number, g.userid, g.win, g.lose FROM GAMES AS g, MATCHES AS m WHERE m.match_id=g.match_id AND m.match_id=?;', [$match_id], 1);
     { success=>1, match=>\@match };
+}
+
+sub getMatches() {
+    my @matches = $db->exec('SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
+                         'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
+                         'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
+                         'WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid;', undef, 1);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    my @games = $db->exec('SELECT * FROM GAMES WHERE win > lose;', undef, 1);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    my %games; # { match_id => [{game_id => 1, win => 11, lose => 7, userid => user1}, {...}] }
+    foreach (@games) {
+        my %val = %$_{qw(game_number userid game_id win lose)};
+        push $games{$_->{match_id}}->@*, \%val;
+    }
+    # combine the 2 records from details into 1
+    my (%win, %lose);
+    foreach (@matches) {
+        if ( $_->{win} ) {
+            $win{$_->{match_id}} = $_;
+        } else {
+            $lose{$_->{match_id}} = $_;
+        }
+    }
+    foreach my $match_id ( keys %win ) {
+        $win{$match_id}->{full_name2} = $lose{$match_id}->{full_name};
+        $win{$match_id}->{point_before2} = $lose{$match_id}->{point_before};
+        $win{$match_id}->{point_after2} = $lose{$match_id}->{point_after};
+        $win{$match_id}->{point_ref2} = $lose{$match_id}->{point_ref};
+        my $game = $games{$match_id};
+        # change all the games point to the match win user's view
+        foreach ( $game->@* ) {
+            next if $_->{userid} eq $win{$match_id}->{userid};
+            ( $_->{win},  $_->{lose}, $_->{userid} ) = ( $_->{lose}, $_->{win}, $win{$match_id}->{userid} );
+        }
+        $win{$match_id}->{games} = [ sort { $a->{game_number} <=> $b->{game_number} } $game->@* ];
+    }
+    @matches = sort { $b->{date} cmp $a->{date} || $b->{match_id} <=> $a->{match_id} } values %win;
+    { success => !$db->{error}, matches => \@matches, msg => $db->{errstr} };
 }
 
 sub editSeries() {
@@ -532,8 +566,14 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch editMatch getSeries editSeries editSeriesUser);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries editSeriesUser);
     if ( $action ) {
+        # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
+        # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
+        # JSON->new->utf8(1)->decode, input must be UTF-8
+        # JSON->new->utf8(0)->decode, input must be Unicode chars
+        my $json = JSON::XS->new->utf8(0)->relaxed->allow_nonref;
+        $json = $json->pretty(1) if -t STDIN;
         print "Content-Type: text/html; charset=utf-8\n\n";
         if ( $action ~~ @valid_actions ) {
             no strict 'refs';
