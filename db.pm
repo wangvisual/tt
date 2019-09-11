@@ -43,8 +43,8 @@ sub init_db($self) {
     # logintype: 0: admin, 1: normal 2: disabled
     $dbh->do("CREATE TABLE IF NOT EXISTS USERS (userid NOT NULL PRIMARY KEY, name NOT NULL, nick_name, cn_name, email NOT NULL, employeeNumber INTEGER NOT NULL, logintype INTEGER NOT NULL, gender NOT NULL DEFAULT '未知', point INTEGER NOT NULL DEFAULT 0)");
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCHES (match_id INTEGER PRIMARY KEY ASC, siries_id INTEGER, stage INTEGER NOT NULL DEFAULT 1, group_number INTEGER DEFAULT 1, date TEXT not null, comment)");
-    # 1, usera, 1600, 1605, 1, 0, 2, 1, userb
-    # 1, userb, 1600, 1595, 0, 1, 1, 2, usera
+    # 1, usera, 1600, 1600, 1605, 1, 0, 2, 1, userb
+    # 1, userb, 1600, 1600, 1595, 0, 1, 1, 2, usera
     $dbh->do("CREATE TABLE IF NOT EXISTS MATCH_DETAILS (match_id INTEGER NOT NULL, userid NOT NULL, point_ref INTEGER NOT NULL, point_before INTEGER NOT NULL, point_after INTEGER NOT NULL, "
            . "win INTEGER NOT NULL, lose INTEGER NOT NULL, game_win INTEGER NOT NULL, game_lose INTEGER NOT NULL, userid2, PRIMARY KEY (match_id, userid))");
     # 1, 1, 1, usera, 11, 7

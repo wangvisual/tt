@@ -103,6 +103,21 @@ TT.app = function() {
         return dirty;
     }
 
+    var userRecord = Ext.data.Record.create([
+        {name: 'userid'},
+        {name: 'employeeNumber', type: 'int'},
+        {name: 'name'},
+        {name: 'nick_name'},
+        {name: 'cn_name'},
+        {name: 'gender'},
+        {name: 'email'},
+        {name: 'logintype', type: 'int'},
+        {name: 'win', type: 'int'},
+        {name: 'lose', type: 'int'},
+        {name: 'siries', type: 'int'},
+        {name: 'point', type: 'int', sortDir: 'DESC'}
+    ]);
+
     var editUserInfo = function(userid) {
 
         function editUserChanged(panel, valid){
@@ -133,16 +148,9 @@ TT.app = function() {
             trackResetOnLoad: true,
             frame: true,
             reader: new Ext.data.JsonReader({
-                    successProperty: 'success',
-                    root : 'user'
-                },[
-                {name: 'userid', type: 'string'},
-                {name: 'nick_name', type: 'string'},
-                {name: 'cn_name', type: 'string'},
-                {name: 'logintype', type: 'int'},
-                {name: 'gender', type: 'string'},
-                {name: 'point', type: 'int'}
-            ]),
+                successProperty: 'success',
+                root : 'user'
+            }, userRecord),
             labelWidth: 70,
             labelAlign: 'right',
             defaultType: 'textfield',
@@ -450,22 +458,10 @@ TT.app = function() {
     };
 
     var showPointList = function(siries_id, siries_name, stage) {
-        var myRecordObj = Ext.data.Record.create([
-            {name: 'userid'},
-            {name: 'employeeNumber', type: 'int'},
-            {name: 'name'},
-            {name: 'nick_name'},
-            {name: 'cn_name'},
-            {name: 'gender'},
-            {name: 'win', type: 'int'},
-            {name: 'lose', type: 'int'},
-            {name: 'siries', type: 'int'},
-            {name: 'point', type: 'int', sortDir: 'DESC'}
-        ]);
         var myReader = new Ext.data.JsonReader({
             root:'users',
             id: 'userid'
-        }, myRecordObj );
+        }, userRecord );
         var grid;
         var original_records;
         var myds = new Ext.data.Store({
@@ -509,9 +505,7 @@ TT.app = function() {
             autoHeight: true,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
-                    var record = g.getStore().getAt(rowIndex);
-                    var data = record.get('userid');
-                    editUserInfo(data);
+                    editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
                 },
             },
             border: false,
@@ -710,18 +704,19 @@ TT.app = function() {
         });
         var mycm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
-            {header: '比赛日期', sortable: true, dataIndex: 'date'},
-            {header: '选手1', sortable: true, dataIndex: 'full_name'},
-            {header: '比分', sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
-                var game_win = record.get('game_win');
-                var game_lose = record.get('game_lose');
-                return game_win + ":" + game_lose;
+            {header: '比赛日期', sortable: true, width: 90, dataIndex: 'date'},
+            {header: '选手1', width: 200, sortable: true, dataIndex: 'full_name'},
+            {header: '比分', sortable: true, width: 40, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
+                return record.get('game_win') + ":" + record.get('game_lose');
             }},
-            {header: '选手2', sortable: true, dataIndex: 'full_name2'},
-            {header: '局分', sortable: true, dataIndex: 'games', renderer: function(value) {
+            {header: '选手2', width: 200, sortable: true, dataIndex: 'full_name2'},
+            {header: '局分', width: 100, sortable: true, dataIndex: 'games', renderer: function(value) {
                 return value.map( x => x.win + ":" + x.lose ).join(', ');
             }},
-            {header: '赛事', sortable: true, dataIndex: 'siries_name'},
+            {header: '积分增减', width: 80, sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
+                return record.get('point_after') - record.get('point_before');
+            }},
+            {header: '赛事', width: 400, sortable: true, dataIndex: 'siries_name'},
         ]);
 
         var toolbar = new Ext.Toolbar({
@@ -736,9 +731,6 @@ TT.app = function() {
         var grid = new Ext.grid.GridPanel({
             ds: myds,
             cm: mycm,
-            viewConfig: {
-                forceFit: true
-            },
             title : '比赛结果',
             id: 'matcheslist',
             autoHeight: true,
@@ -755,6 +747,70 @@ TT.app = function() {
         listpanel.add(grid);
         listpanel.doLayout();
     };
+
+    var showUsers = function() {
+        var myds = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getUserList'},
+            autoLoad: true,
+            autoDestroy: true,
+            root: 'users',
+            id: 'userid',
+            fields: userRecord,
+        });
+        var mycm = new Ext.grid.ColumnModel({
+            defaults: {
+                width: 100,
+                sortable: true
+            },
+            columns: [
+                new Ext.grid.RowNumberer(),
+                {header: 'ID', dataIndex: 'userid'},
+                {header: 'Name', dataIndex: 'name'},
+                {header: '姓名', dataIndex: 'cn_name'},
+                {header: '外号', dataIndex: 'nick_name'},
+                {header: '性别', dataIndex: 'gender'},
+                {header: '类型', dataIndex: 'logintype',
+                    renderer: function(value) {
+                        var found = loginTypes.find(function(element) {return element[0] == value;});
+                        return found ? found[1] : value;
+                    },
+                },
+                {header: '员工号', dataIndex: 'employeeNumber'},
+                {header: '邮件地址', width: 300, dataIndex: 'email'},
+                {header: '积分', dataIndex: 'point'},
+        ]});
+
+        var toolbar = new Ext.Toolbar({
+            items:[
+                {
+                    text:"添加人员",
+                    handler: function(){ editUserInfo(); }
+                },
+                '-',
+            ]
+        });
+        var grid = new Ext.grid.GridPanel({
+            ds: myds,
+            cm: mycm,
+            title : '所有人员信息',
+            listeners: {
+                'rowdblclick': function(g, rowIndex, e) {
+                    editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
+                },
+            },
+            autoHeight: true,
+            tbar: toolbar,
+            border: false,
+            frame: true
+        });
+
+        listpanel.removeAll(true);
+        listpanel.add(grid);
+        listpanel.doLayout();
+    };
+
     // public space
     return {
         // public methods
@@ -854,14 +910,14 @@ TT.app = function() {
                     text: '比赛结果',
                     handler: function () { showMatches(); }
                 },{
-                    text: '增加人员',
-                    handler: function () { editUserInfo(); }
-                },{
-                    text: '系列赛',
+                    text: '系列赛事',
                     handler: showSeries
                 },{
-                    text: '链接'
-                    // https://www.ratingscentral.com
+                    text: '所有用户',
+                    handler: function () { showUsers(); }
+                },{
+                    text: '源代码',
+                    handler: function () { window.open('https://github.com/wangvisual/tt', '_blank'); },
                 }]
             });
 

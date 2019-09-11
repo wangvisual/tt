@@ -516,8 +516,9 @@ sub editSeriesUser {
 }
 
 sub getUserList() {
-    # TODO, filter
-    my @val = $db->exec('SELECT name || ", " || cn_name || ", " || nick_name as full_name, * FROM USERS WHERE logintype<=? ORDER BY userid ASC;', [1], 1);
+    my $filter = $q->param('filter') // '';
+    my $sql = 'SELECT name || ", " || cn_name || ", " || nick_name as full_name, * FROM USERS ' . ( $filter ? 'WHERE logintype<=?' : '' ) . ' ORDER BY userid ASC;';
+    my @val = $db->exec($sql, $filter ? [1] : undef, 1);
     { success=>!$db->{error}, users=>\@val };
 }
 
