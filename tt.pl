@@ -349,11 +349,13 @@ sub getMatch() {
     { success=>1, match=>\@match };
 }
 
-sub getMatches() {
-    my @matches = $db->exec('SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
-                         'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
-                         'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
-                         'WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid;', undef, 1);
+sub getMatches($siries_id = undef, $stage = 1, $group_number = 1) {
+    my $filter = defined $siries_id ? "AND m.siries_id=? AND m.stage=? AND m.group_number=?" : '';
+    my $sql = 'SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
+              'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
+              'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
+              "WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid $filter;";
+    my @matches = $db->exec($sql, defined $siries_id ? [$siries_id, $stage, $group_number] : undef, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
     my @games = $db->exec('SELECT * FROM GAMES WHERE win > lose;', undef, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
@@ -372,6 +374,7 @@ sub getMatches() {
         }
     }
     foreach my $match_id ( keys %win ) {
+        $win{$match_id}->{userid2} = $lose{$match_id}->{userid};
         $win{$match_id}->{full_name2} = $lose{$match_id}->{full_name};
         $win{$match_id}->{point_before2} = $lose{$match_id}->{point_before};
         $win{$match_id}->{point_after2} = $lose{$match_id}->{point_after};
@@ -386,6 +389,52 @@ sub getMatches() {
     }
     @matches = sort { $b->{date} cmp $a->{date} || $b->{match_id} <=> $a->{match_id} } values %win;
     { success => !$db->{error}, matches => \@matches, msg => $db->{errstr} };
+}
+
+sub getSeriesMatch() {
+    my $siries_id = get_param('siries_id') || -1;
+    return { success=>0, msg=>"输入无效" } if $siries_id == -1;
+    my $group_number = 1; #FIXME
+    my @stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
+    return { success=>0, msg=> $db->{errstr} } if $db->{err};
+    my $stage =  $stage[0]->{stage} // 1;
+    my @userids = $db->exec('SELECT userid from SERIES_USERS WHERE siries_id=? AND stage=? AND group_number=?;', [$siries_id, $stage, $group_number], 1, 0);
+    return { success=>0, msg=> $db->{errstr} } if $db->{err};
+    my $data = getMatches($siries_id, $stage, $group_number);
+    return $data if !$data->{success};
+    my $userlist = getUserList();
+    return $userlist if !$userlist->{success};
+    my %name;
+    foreach ( $userlist->{users}->@* ) {
+        $name{$_->{userid}} = $_->{cn_name};
+    }
+    # change to 2 dimension table
+    my $matches = $data->{matches};
+    my %cross;
+    my %scores; # TODO same score?
+    foreach my $m ($matches->@*) {
+        $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id} };
+        $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id} };
+        $scores{$m->{userid}} += 2;
+        $scores{$m->{userid2}} += 1;
+        push @userids, { userid => $m->{userid} };
+        push @userids, { userid => $m->{userid2} };
+    }
+    my %users = map{; $_->{userid} => 1 } @userids;
+    my @sort_users = sort { $scores{$b} <=> $scores{$a} } keys %users;
+    my @results; # ( {userid => 'a', 'a' => 'N/A', 'b' => '2:0', 'c' => '3:1', ... '_score' => 10}, ... )
+    foreach my $u1 ( @sort_users ) {
+        my %r = ( userid => $u1, _name => $name{$u1}, _score => $scores{$u1} );
+        foreach my $u2 ( @sort_users ) {
+            $r{$u2} = $cross{$u1}->{$u2} // ( $u1 eq $u2 ? '' : {} );
+        }
+        push @results, \%r;
+    }
+    my @columns = map {; { header =>  $name{$_}, dataIndex => $_, renderer => 'renderColumn' } } @sort_users;
+    push @columns, { header =>  '分数', dataIndex => '_score' };
+    unshift @columns, { header => '姓名', dataIndex => '_name' };
+    my %meta = ( root => 'results', id => 'userid', fields => [ map{; {name => $_->{dataIndex}} } @columns] );
+    { success => 1, metaData => \%meta, columns => \@columns, results => \@results };
 }
 
 sub editSeries() {
@@ -545,6 +594,7 @@ sub printheader($q) {
                          -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
                                    {-code=>$js_settings},
+                                   {-src=>"DynaGrid.js"},
                                    {-src=>"tt.js"},
                                   ],
                          -meta=>{'keywords'=>'Table Tennis',
@@ -567,7 +617,7 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries editSeriesUser);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries editSeriesUser getSeriesMatch);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode

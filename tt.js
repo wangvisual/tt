@@ -653,9 +653,11 @@ TT.app = function() {
             tbar: toolbar,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
+                    editSeries(g.getStore().getAt(rowIndex).get('siries_id'));
+                },
+                'rowclick': function(g, rowIndex, e) {
                     var record = g.getStore().getAt(rowIndex);
-                    var data = record.get('siries_id');
-                    editSeries(data);
+                    showSeriesMatch(record.get('siries_id'), record.get('siries_name'));
                 },
             },
             border: false,
@@ -811,6 +813,40 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
+    var showSeriesMatch = function(siries_id, siries_name) {
+        var myds = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getSeriesMatch', siries_id: siries_id},
+            autoDestroy: true,
+        });
+        var grid = new Ext.ux.DynamicGridPanel({
+            id: 'show_series_match_' + siries_id,
+            ds: myds,
+            rowNumberer: true,
+            title : siries_name + ' 结果',
+            autoHeight: true,
+            border: false,
+            frame: true,
+            renders: {
+                renderColumn: function(value, metadata, record) {
+                    if ( typeof(value) != 'object' ) {
+                        metadata.css = metadata.css +" diagonalFalling";
+                        return '';
+                    }
+                    if ( typeof(value.win) != 'undefined' ) {
+                        metadata.css = metadata.css + ( value.win ? " win" : " lose" );
+                    }
+                    return value.result;
+                },
+            },
+        });
+
+        listpanel.remove('show_series_match_' + siries_id);
+        listpanel.add(grid);
+        listpanel.doLayout();
+    };
+
     // public space
     return {
         // public methods
@@ -916,7 +952,7 @@ TT.app = function() {
                     text: '所有用户',
                     handler: function () { showUsers(); }
                 },{
-                    text: '源代码',
+                    text: '源代码库',
                     handler: function () { window.open('https://github.com/wangvisual/tt', '_blank'); },
                 }]
             });

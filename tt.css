@@ -1,22 +1,16 @@
-#infotable tr td {
-    white-space: nowrap;
-    padding: 1px 50px 1px 1px;
-    width: 100%;
+td.win {
+    color: red;
 }
 
-#infobuttontd {
-    padding: 1px !important;
-    text-align: right;
+td.lose {
+    color: green;
+}
+
+td.diagonalFalling {
+    /* https://stackoverflow.com/questions/30376886/is-it-possible-to-cross-out-cells-in-an-html-table/30377346#30377346 */
+    background-image: linear-gradient(to top right,  transparent calc(50% - 1px), black, transparent calc(50% + 1px));
 }
 
 #spinner * {
     background-color: transparent;
-}
-
-.modifiedM {
-    color: red !important;
-}
-
-.BalanceHost {
-    color: green;
 }
