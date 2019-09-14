@@ -836,6 +836,11 @@ TT.app = function() {
                     }
                     if ( typeof(value.win) != 'undefined' ) {
                         metadata.css = metadata.css + ( value.win ? " win" : " lose" );
+                        // http://developer.51cto.com/art/200907/133445.htm
+                        // metadata.cellAttr is for the td, and will be masked for the div inside
+                        // metadata.attr is for the div inside the td
+                        // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
+                        metadata.attr = 'ext:qtip="' + value.game + '"';
                     }
                     return value.result;
                 },
@@ -1007,6 +1012,7 @@ TT.app = function() {
                  scope: this
             });
 
+            Ext.QuickTips.init();
             logpanel.log("OK.");
             msgpanel.msg("Ready.");
             showGeneralInfo();
@@ -1015,6 +1021,3 @@ TT.app = function() {
     };
 }();
 
-Ext.apply(TT.app, {
-    // change public variable here if needed.
-});

@@ -413,8 +413,10 @@ sub getSeriesMatch() {
     my %cross;
     my %scores; # TODO same score?
     foreach my $m ($matches->@*) {
-        $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id} };
-        $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id} };
+        my $game = "$m->{date}, " . join(', ', map {; "$_->{win}:$_->{lose}" } $m->{games}->@*);
+        my $game2 = "$m->{date}, " . join(', ', map {; "$_->{lose}:$_->{win}" } $m->{games}->@*);
+        $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id}, game => $game };
+        $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id}, game => $game2 };
         $scores{$m->{userid}} += 2;
         $scores{$m->{userid2}} += 1;
         push @userids, { userid => $m->{userid} };

@@ -14,3 +14,9 @@ td.diagonalFalling {
 #spinner * {
     background-color: transparent;
 }
+
+#infotable tr td {
+    white-space: nowrap;
+    padding: 1px 50px 1px 1px;
+    width: 100%;
+}
