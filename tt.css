@@ -20,3 +20,7 @@ td.diagonalFalling {
     padding: 1px 50px 1px 1px;
     width: 100%;
 }
+
+a.ttlink {
+    cursor: pointer;
+}

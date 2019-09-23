@@ -56,7 +56,7 @@ sub init_db($self) {
     $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     # stage: 0 => enroll, 1 => 循环赛, 2 => 淘汰赛, 100 => end
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES (siries_id INTEGER PRIMARY KEY ASC, siries_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
-           . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0)");
+           . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0, links)");
     # When a siries changed from enroll to competition, or 循环赛=>淘汰赛, capture(update) the point snapshot into SERIES_USERS
     # If the siries never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
     # 报名: 1, 0, usera, 1600, null

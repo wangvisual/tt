@@ -423,6 +423,8 @@ sub getSeriesMatch() {
         push @userids, { userid => $m->{userid2} };
     }
     my %users = map{; $_->{userid} => 1 } @userids;
+    # http://www.ctsports.com.cn/mobile/index.php?m=default&c=article&a=info&aid=16113&u=0
+    # 楚天乒乓球教程：乒乓球规则关于单循环赛名词的确定
     my @sort_users = sort { $scores{$b} <=> $scores{$a} } keys %users;
     my @results; # ( {userid => 'a', 'a' => 'N/A', 'b' => '2:0', 'c' => '3:1', ... '_score' => 10}, ... )
     foreach my $u1 ( @sort_users ) {
@@ -449,6 +451,7 @@ sub editSeries() {
     my $group_outlets = get_param('group_outlets') || 1;
     my $top_n = get_param('top_n') || 1;
     my $stage = get_param('stage') || 0;
+    my $links = get_param('links', '');
 
     return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > STAGE_END;
 
@@ -458,12 +461,12 @@ sub editSeries() {
         if ( $siries_id > 0 ) {
             my @old_stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
             my $old = ( !$db->{err} && scalar @old_stage == 1 && defined $old_stage[0]->{stage} ) ? $old_stage[0]->{stage} : -1;
-            $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=? where siries_id=?;',
-                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $siries_id], 0, 0);
+            $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=?,links=? where siries_id=?;',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links, $siries_id], 0, 0);
             $need_capture &&= ( $old < $stage ) ? 1 : 0; # eg, 报名结束，进入循环赛
         } else {
-            $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?);',
-                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage], 2, 0);
+            $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage,links) VALUES(?,?,?,?,?,?);',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links], 2, 0);
             $siries_id = $db->{last_insert_id};
         }
         if ( $need_capture ) {
@@ -491,7 +494,7 @@ sub getSeries() {
     my $siries_id = get_param('siries_id') || -1;
     my $ongoing = get_param('ongoing', '');
     my @series;
-    my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage FROM SERIES';
+    my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links FROM SERIES';
     if ( $siries_id > 0 ) {
         @series = $db->exec("$base WHERE siries_id=?;", [$siries_id], 1);
     } elsif ( $ongoing ) {

@@ -239,6 +239,7 @@ TT.app = function() {
                 },[
                 {name: 'siries_id', type: 'int'},
                 {name: 'siries_name', type: 'string'},
+                {name: 'links', type: 'string'},
                 {name: 'number_of_groups', type: 'int'},
                 {name: 'group_outlets', type: 'int'},
                 {name: 'top_n', type: 'int'},
@@ -260,6 +261,7 @@ TT.app = function() {
                         ,data:stageTypes}),
                   displayField: 'type', valueField: 'id', hiddenName: 'stage', value: 0,
                 },
+                { fieldLabel: '外部链接', width: 450, xtype: 'textarea', name: 'links', allowBlank: true },
             ],
             monitorValid: true,
             listeners: {
@@ -583,6 +585,7 @@ TT.app = function() {
         var myRecordObj = Ext.data.Record.create([
             {name: 'siries_id', type: 'int', sortDir: 'ASC'},
             {name: 'siries_name'},
+            {name: 'links'},
             {name: 'number_of_groups', type: 'int'},
             {name: 'group_outlets', type: 'int'},
             {name: 'top_n', type: 'int'},
@@ -618,13 +621,35 @@ TT.app = function() {
             }},
             {header: '报名人数', sortable: true, dataIndex: 'enroll'},
             {header: '当前阶段人数', sortable: true, dataIndex: 'count'},
-            {xtype: 'actioncolumn', header: '报名', items: [{icon   : 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
+            {xtype: 'actioncolumn', header: '报名', items: [{icon: 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
                 var siries_id = record.get('siries_id');
                 var siries_name = record.get('siries_name');
                 var stage = record.get('stage');
                 showPointList(siries_id, siries_name, stage);
             }}]},
+            {xtype: 'actioncolumn', header: '结果', items: [{icon: 'etc/cup.png', tooltip: '显示比赛结果', handler: function(g, rowIndex) {
+                var record = g.getStore().getAt(rowIndex);
+                showSeriesMatch(record.get('siries_id'), record.get('siries_name'));
+            }}]},
+            {header: '链接', width: 300, dataIndex: 'links',
+                renderer: function(value) {
+                    if ( !value ) {
+                        return '';
+                    }
+                    // [txt](URL)\nURL\n...
+                    return value.split("\n").map(function(x) {
+                        var groups = x.match(/\[(.*?)\]\((.*?)\)/);
+                        var txt = x;
+                        var url = x;
+                        if ( groups ) {
+                            txt = groups[1];
+                            url = groups[2];
+                        }
+                        return "<a class='ttlink' target='_blank' href='" + url + "'>" + txt + '</a>';
+                    }). join(' ');
+                }
+            },
         ]);
 
         var toolbar = new Ext.Toolbar({
@@ -654,10 +679,6 @@ TT.app = function() {
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     editSeries(g.getStore().getAt(rowIndex).get('siries_id'));
-                },
-                'rowclick': function(g, rowIndex, e) {
-                    var record = g.getStore().getAt(rowIndex);
-                    showSeriesMatch(record.get('siries_id'), record.get('siries_name'));
                 },
             },
             border: false,
@@ -739,7 +760,7 @@ TT.app = function() {
             tbar: toolbar,
             view: new Ext.grid.GroupingView({
                 forceFit: true,
-                groupTextTpl: '{text} ({[values.rs.length]} {["项"]})'
+                groupTextTpl: '{text} ({[values.rs.length]} {["场"]})'
             }),
             border: false,
             frame: true
