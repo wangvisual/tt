@@ -24,3 +24,23 @@ td.diagonalFalling {
 a.ttlink {
     cursor: pointer;
 }
+
+/* https://www.scriptol.com/css/tooltip.php */
+span.avatar span {
+    display: none;
+}
+
+span.avatar:hover span {
+    display:block;
+    position:absolute;
+    z-index:1000;
+    top: 20%;
+    margin-left:100px;
+}
+
+.x-grid3-hd-avatar {
+    background: transparent
+        url(etc/avatar.png)
+        no-repeat 3px 3px ! important;
+}
+

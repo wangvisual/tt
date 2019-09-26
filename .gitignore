@@ -6,6 +6,12 @@
 *.o
 *.pm.tdy
 *.bs
+*.bak
+*.old
+lib
+sqlite3
+site_settings.pm
+/db/
 
 # Devel::Cover
 cover_db/

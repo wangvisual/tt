@@ -24,10 +24,14 @@ use constant {
 my $stage_name = { 0 => '报名', 1 => '循环赛', 2 => '淘汰赛', &STAGE_END() => '结束' };
 
 use settings;
+eval {
+    use site_settings;
+};
 use db;
 
 my $imgd = 'etc';
 my $extjs = 'https://cdnjs.cloudflare.com/ajax/libs/extjs/3.4.1-1';
+my $sprintf = 'https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.1.2';
 
 my $userid = '';
 my ($q,$db);
@@ -587,10 +591,10 @@ sub printheader($q) {
     print $q->header( -charset=>'utf-8',
                       -expires=>'now',
                     );
-    my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\n";
+    my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n";
     print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
-                         -author=>'Opera.Wang@Synopsys.com',
+                         -author=>'Opera.Wang',
                          -head=>Link({-rel=>'SHORTCUT ICON',-type=>'image/x-icon',-href=>"$imgd/tt.png"}),
                          -style=>{-src => ["$extjs/resources/css/ext-all.css",
                                            "tt.css",
@@ -598,6 +602,7 @@ sub printheader($q) {
                                  },
                          -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
+                                   {-src=>"$sprintf/sprintf" . ( $settings::debug ? ".min" : "" ) . ".js"},
                                    {-code=>$js_settings},
                                    {-src=>"DynaGrid.js"},
                                    {-src=>"tt.js"},

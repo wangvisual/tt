@@ -85,7 +85,7 @@ TT.app = function() {
         }
         var r = Math.round(i*m)/m;
         return r;
-    };
+    }
 
     function formIsDirty(panelid) {
         var pa = Ext.getCmp(panelid);
@@ -101,6 +101,13 @@ TT.app = function() {
         }
         isd(pa);
         return dirty;
+    }
+
+    function getAvatar(data) {
+        if ( !avatar_template ) {
+            return 'etc/' + data.gender + '.png';
+        }
+        return sprintf(avatar_template, data);
     }
 
     var userRecord = Ext.data.Record.create([
@@ -486,8 +493,12 @@ TT.app = function() {
         var mycm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
             {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
-            {header: 'employeeNumber', width: 0, dataIndex: 'employeeNumber', hidden: true},
-            {header: 'Name', width: 120, sortable: true, dataIndex: 'name'},
+            // the header below is a special blank character
+            {header: '　', width: 0, dataIndex: 'employeeNumber', id: 'avatar', renderer: function(value, metadata, record) {
+                var img = getAvatar(record.data);
+                // use css to show the avatar as tooltip may reload the image from server and cause delay
+                return "<span class='avatar'><img height='14' src='" + img + "'/><span><img height='200' src='" + img + "'/></span></span>";
+            }},
             {header: '姓名', width: 100, sortable: true, dataIndex: 'cn_name'},
             {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
             {header: '性别', width: 100, sortable: true, dataIndex: 'gender'},
