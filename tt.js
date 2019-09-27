@@ -116,6 +116,7 @@ TT.app = function() {
         {name: 'name'},
         {name: 'nick_name'},
         {name: 'cn_name'},
+        {name: 'full_name'},
         {name: 'gender'},
         {name: 'email'},
         {name: 'logintype', type: 'int'},
@@ -341,6 +342,10 @@ TT.app = function() {
             fields: ['siries_id', 'siries_name']
         });
 
+        var userList2 = new Ext.data.JsonStore({
+            autoDestroy: true,
+        });
+
         var userList = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
@@ -348,7 +353,13 @@ TT.app = function() {
             autoLoad: true,
             autoDestroy: true,
             root: 'users',
-            fields: ['userid', 'full_name']
+            id: 'userid',
+            fields: userRecord,
+            listeners: {
+                load: function(store, records, options ) {
+                    userList2.add(records.map( r => r.copy() ));
+                },
+            },
         });
 
         function editMatchChanged(panel, valid){
@@ -419,16 +430,26 @@ TT.app = function() {
                 },
                 { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
                 { layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [
-                    { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: false, forceSelection: true,
+                    { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList,
-                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1'
+                      displayField: 'full_name', valueField: 'userid', listeners: {
+                          select: function(combo, record, index) {
+                              Ext.getCmp('user1_avatar').getEl().dom.src = getAvatar(record.data);
+                          }
+                      },
                     },
-                    { xtype: 'box', autoEl: {tag: 'img', width: 48, height: 32, src: 'etc/versus.png'} },
-                    { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: false, forceSelection: true,
+                    { xtype: 'box', id: 'user1_avatar', autoEl: {tag: 'img', height: 64, src: 'etc/男.png'} },
+                    { xtype: 'box', autoEl: {tag: 'img', height: 64, src: 'etc/versus.png'} },
+                    { xtype: 'box', id: 'user2_avatar', autoEl: {tag: 'img', height: 64, src: 'etc/男.png'} },
+                    { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
                       triggerAction: 'all', mode: 'local',
-                      store: userList,
-                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid2'
+                      store: userList2,
+                      displayField: 'full_name', valueField: 'userid', listeners: {
+                          select: function(combo, record, index) {
+                              Ext.getCmp('user2_avatar').getEl().dom.src = getAvatar(record.data);
+                          }
+                      },
                     },
                 ]},
                 generateGames(),
