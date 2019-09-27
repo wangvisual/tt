@@ -9,6 +9,15 @@ TT.app = function() {
     var loginTypes = [ [0, '管理员'], [1, '一般用户'], [2, '无效用户'] ];
     var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [100, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
+    var grid_default = {
+        stripeRows: true,
+        border: false,
+        frame: true,
+        autoHeight: true,
+        viewConfig: {
+            forceFit: true
+        },
+    };
 
     var userid = '';
     var ulds; // UserList Data Store
@@ -529,21 +538,16 @@ TT.app = function() {
         ]);
 
         grid = new Ext.grid.GridPanel({
+            ...grid_default,
             ds: myds,
             cm: mycm,
-            viewConfig: {
-                forceFit: true
-            },
             title : '积分概览',
             id: 'pointlist',
-            autoHeight: true,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
                 },
             },
-            border: false,
-            frame: true
         });
 
         if ( siries_id ) {
@@ -701,20 +705,15 @@ TT.app = function() {
         var grid = new Ext.grid.GridPanel({
             ds: myds,
             cm: mycm,
-            viewConfig: {
-                forceFit: true
-            },
+            ...grid_default,
             title : '系列赛',
             id: 'sirieslist',
-            autoHeight: true,
             tbar: toolbar,
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     editSeries(g.getStore().getAt(rowIndex).get('siries_id'));
                 },
             },
-            border: false,
-            frame: true
         });
 
         listpanel.removeAll(true);
@@ -786,16 +785,14 @@ TT.app = function() {
         var grid = new Ext.grid.GridPanel({
             ds: myds,
             cm: mycm,
+            ...grid_default,
             title : '比赛结果',
             id: 'matcheslist',
-            autoHeight: true,
             tbar: toolbar,
             view: new Ext.grid.GroupingView({
                 forceFit: true,
                 groupTextTpl: '{text} ({[values.rs.length]} {["场"]})'
             }),
-            border: false,
-            frame: true
         });
 
         listpanel.removeAll(true);
@@ -849,16 +846,14 @@ TT.app = function() {
         var grid = new Ext.grid.GridPanel({
             ds: myds,
             cm: mycm,
+            ...grid_default,
             title : '所有人员信息',
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
                 },
             },
-            autoHeight: true,
             tbar: toolbar,
-            border: false,
-            frame: true
         });
 
         listpanel.removeAll(true);

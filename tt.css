@@ -25,6 +25,10 @@ a.ttlink {
     cursor: pointer;
 }
 
+input[readOnly]:not(.x-trigger-noedit) {
+    background: lightgrey;
+}
+
 /* https://www.scriptol.com/css/tooltip.php */
 span.avatar span {
     display: none;
