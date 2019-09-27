@@ -591,7 +591,8 @@ sub printheader($q) {
     print $q->header( -charset=>'utf-8',
                       -expires=>'now',
                     );
-    my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n";
+    my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n" .
+                      "var more='';\n";
     print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
                          -author=>'Opera.Wang',
@@ -604,6 +605,7 @@ sub printheader($q) {
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
                                    {-src=>"$sprintf/sprintf" . ( $settings::debug ? ".min" : "" ) . ".js"},
                                    {-code=>$js_settings},
+                                   {-src=>'more.js'},
                                    {-src=>"DynaGrid.js"},
                                    {-src=>"tt.js"},
                                   ],

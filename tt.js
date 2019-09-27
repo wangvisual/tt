@@ -989,6 +989,7 @@ TT.app = function() {
                 minSize: 100,
                 maxSize: 200,
                 defaults: { minWidth: 98, bodyStyle: 'padding: 15px' },
+                html: more,
                 items: [{
                     text: '我的信息',
                     handler: function () { editUserInfo(userid); }
