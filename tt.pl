@@ -354,12 +354,14 @@ sub getMatch() {
 }
 
 sub getMatches($siries_id = undef, $stage = 1, $group_number = 1) {
+    my $id = get_param('userid');
     my $filter = defined $siries_id ? "AND m.siries_id=? AND m.stage=? AND m.group_number=?" : '';
+    my $inputs = defined $siries_id ? [$siries_id, $stage, $group_number] : [];
     my $sql = 'SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
               'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
               'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
               "WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid $filter;";
-    my @matches = $db->exec($sql, defined $siries_id ? [$siries_id, $stage, $group_number] : undef, 1);
+    my @matches = $db->exec($sql, $inputs, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
     my @games = $db->exec('SELECT * FROM GAMES WHERE win > lose;', undef, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
@@ -392,6 +394,7 @@ sub getMatches($siries_id = undef, $stage = 1, $group_number = 1) {
         $win{$match_id}->{games} = [ sort { $a->{game_number} <=> $b->{game_number} } $game->@* ];
     }
     @matches = sort { $b->{date} cmp $a->{date} || $b->{match_id} <=> $a->{match_id} } values %win;
+    @matches = grep { $_->{userid} eq $id || $_->{userid2} eq $id } @matches if $id;
     { success => !$db->{error}, matches => \@matches, msg => $db->{errstr} };
 }
 

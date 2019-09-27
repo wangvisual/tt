@@ -721,7 +721,7 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
-    var showMatches = function() {
+    var showMatches = function(id) {
         var myReader = new Ext.data.JsonReader({
             root:'matches',
             id: 'match_id',
@@ -749,7 +749,7 @@ TT.app = function() {
                         url: tturl,
                         method: 'POST'
                    }),
-            baseParams: {action: 'getMatches'},
+            baseParams: {action: 'getMatches', userid: id},
             autoLoad: true,
             autoDestroy: true,
             reader: myReader,
@@ -993,6 +993,9 @@ TT.app = function() {
                 items: [{
                     text: '我的信息',
                     handler: function () { editUserInfo(userid); }
+                },{
+                    text: '我的比赛',
+                    handler: function () { showMatches(userid); }
                 },{
                     text: '积分概览',
                     handler: function () { showPointList(); }
