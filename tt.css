@@ -48,3 +48,12 @@ span.avatar:hover span {
         no-repeat 3px 3px ! important;
 }
 
+#more {
+    font-size: 12px;
+}
+
+#more div{
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
