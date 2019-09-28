@@ -722,6 +722,22 @@ TT.app = function() {
     };
 
     var showMatches = function(id) {
+        var userList = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getUserList', filter: 'valid'},
+            autoLoad: true,
+            autoDestroy: true,
+            root: 'users',
+            id: 'userid',
+            fields: userRecord,
+            listeners: {
+                load: function(store, records, options ) {
+                    if ( !id ) return;
+                    Ext.getCmp('match_filter').setValue( store.getById(id).get('full_name') );
+                }
+            },
+        });
         var myReader = new Ext.data.JsonReader({
             root:'matches',
             id: 'match_id',
@@ -775,11 +791,21 @@ TT.app = function() {
 
         var toolbar = new Ext.Toolbar({
             items:[
-                {
-                    text:"记录比赛结果",
-                    handler: function(){ editMatch(); }
-                },
+                { text:"记录比赛结果", handler: function() { editMatch(); } },
                 '-',
+                { text:"我的比赛", handler: function () { showMatches(userid); } },
+                '-',
+                { text:"所有比赛", handler: function () { showMatches(); } },
+                '-',
+                { xtype: 'combo', name: 'useridfake', id: 'match_filter', allowBlank: true, editable: true, typeAhead: true,
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local', value: id || '所有比赛',
+                  store: userList,
+                  displayField: 'full_name', valueField: 'userid', listeners: {
+                      select: function(combo, record, index) {
+                          showMatches(record.data.userid);
+                      }
+                  },
+                },
             ]
         });
         var grid = new Ext.grid.GridPanel({
