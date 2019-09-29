@@ -442,7 +442,7 @@ TT.app = function() {
                     { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList,
-                      displayField: 'full_name', valueField: 'userid', listeners: {
+                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1', listeners: {
                           select: function(combo, record, index) {
                               Ext.getCmp('user1_avatar').getEl().dom.src = getAvatar(record.data);
                           }
@@ -454,7 +454,7 @@ TT.app = function() {
                     { fieldLabel: '', xtype: 'combo', id: 'edituser2combo', name: 'user2_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
                       triggerAction: 'all', mode: 'local',
                       store: userList2,
-                      displayField: 'full_name', valueField: 'userid', listeners: {
+                      displayField: 'full_name', valueField: 'userid', hiddenName: 'userid2', listeners: {
                           select: function(combo, record, index) {
                               Ext.getCmp('user2_avatar').getEl().dom.src = getAvatar(record.data);
                           }
