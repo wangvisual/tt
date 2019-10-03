@@ -16,6 +16,7 @@ use Data::Dumper;
 use Mail::Sendmail;
 use JSON::XS;
 use Net::LDAP;
+use List::Util qw(sum0);
 
 use constant {
     DEFAULT_POINT => 1600,
@@ -299,6 +300,9 @@ sub editMatch() {
 <html>
     <head>
       <style type='text/css'>
+          h1 {
+            line-height: 125%;
+          }
           table,tr,th,td {
             border: 1px solid black;
             border-collapse: collapse;
@@ -312,7 +316,7 @@ sub editMatch() {
           tr:nth-child(even) {background-color: #f2f2f2;}
       </style>
     </head>
-    <body>
+    <body style="font-family: Segoe UI, Helvetica, Arial, 宋体, 微软雅黑, sans-serif">
     <h1>$series[0]->{siries_name}</h1>
     <h2>$stage_name->{$stage}阶段 第${group_number}组 比赛结果 @ $date</h2>
     <p>
@@ -398,6 +402,66 @@ sub getMatches($siries_id = undef, $stage = 1, $group_number = 1) {
     { success => !$db->{error}, matches => \@matches, msg => $db->{errstr} };
 }
 
+sub set_compare_result($levels, $cross_detail) {
+    my @lvs = sort { $b <=> $a } keys $levels->%*; # (30, 29, 18, ...)
+    foreach my $level1 ( @lvs ) {
+        my @users = $levels->{$level1}->@*;
+        # if more than 1 users have same score, then compare again
+        compare_users(\@users, $cross_detail) if scalar @users >= 2;
+        foreach my $level2 ( @lvs ) {
+            next if $level2 >= $level1;
+            foreach my $users1 ( @users ) {
+                foreach my $users2 ( $levels->{$level2}->@* ) {
+                    $cross_detail->{$users1}->{$users2}->{sorting} = 1;
+                    $cross_detail->{$users2}->{$users1}->{sorting} = -1;
+                }
+            }
+        }
+    }
+}
+
+# https://max.book118.com/html/2019/0319/6132102113002015.shtm
+# 3.7.5.1在分组循环赛中，小组里每一成员应与组内所有其他成员进行比赛；胜一场得2分，输一场得1分，未出场比赛或未完成比赛输的场次得0分，小组名次应根据所获得的场次分数决定。
+# 3.7.5.2如果小组的两个或更多的成员得分数相同，他们有关的名次应按他们相互之间比赛的成绩决定。首先计算他们之间获得的场次分数，再根据需要计算个人比赛场次(团体赛时)、局和分的胜负比率，直至算出名次为止。
+# 3.7.5.3如果在任何阶段已经决定出一个或更多小组成员的名次后，而其他小组成员仍然得分相同，为决定相同分数成员的名次，根据3.7.5.1和3.7.5.2条程序继续计算时，应将已决定出名次的小组成员的比赛成绩删除。
+sub compare_users($users, $cross_detail) {
+    my (%scores, %compare_games, %compare_points);
+    while (my ($user1, $crosses) = each( $cross_detail->%* )) {
+        next unless $user1 ~~ $users;
+        while (my ($user2, $cross) = each( $crosses->%* )) {
+            next if !defined $cross->{win} || $cross->{win} == 0; # only check win half
+            next unless $user2 ~~ $users;
+            $scores{$user1} += 2;
+            $scores{$user2} += 1;
+            $compare_games{$user1}->{win} += $cross->{game_win};
+            $compare_games{$user1}->{lose} += $cross->{game_lose};
+            $compare_games{$user2}->{lose} += $cross->{game_win};
+            $compare_games{$user2}->{win} += $cross->{game_lose};
+            $compare_points{$user1}->{win} += $cross->{point_win};
+            $compare_points{$user1}->{lose} += $cross->{point_lose};
+            $compare_points{$user2}->{lose} += $cross->{point_win};
+            $compare_points{$user2}->{win} += $cross->{point_lose};
+        }
+    }
+    my (%score_level, %games_level, %points_level); # ( 30 => [use1, user2], ... )
+    my $e = 0.0000001;
+    foreach ( $users->@* ) {
+        push $score_level{$scores{$_} || 0}->@*, $_;
+        my $games_ratio = ( $compare_games{$_}->{win} || 0 ) / ( $compare_games{$_}->{lose} || $e );
+        push $games_level{$games_ratio}->@*, $_;
+        my $points_ratio = ( $compare_points{$_}->{win} || 0 ) / ( $compare_points{$_}->{lose} || $e );
+        push $points_level{$points_ratio}->@*, $_;
+    }
+    #print STDERR Dumper($users, \%scores, \%compare_games, \%compare_points, \%score_level, \%games_level, \%points_level);
+    if ( scalar keys %score_level > 1 ) {
+        set_compare_result(\%score_level, $cross_detail);
+    } elsif ( scalar keys %games_level > 1 ) {
+        set_compare_result(\%games_level, $cross_detail);
+    } elsif ( scalar keys %points_level > 1 ) {
+        set_compare_result(\%points_level, $cross_detail);
+    }
+}
+
 sub getSeriesMatch() {
     my $siries_id = get_param('siries_id') || -1;
     return { success=>0, msg=>"输入无效" } if $siries_id == -1;
@@ -416,23 +480,29 @@ sub getSeriesMatch() {
         $name{$_->{userid}} = $_->{cn_name};
     }
     # change to 2 dimension table
-    my $matches = $data->{matches};
-    my %cross;
-    my %scores; # TODO same score?
+    my $matches = $data->{matches}; # [ { userid, userid2, win, lose, games => [win, lose, game_number, game_id, userid] }, ... ]
+    my %cross; # { userid1 => { userid2 => { 'result' => '0:2', 'win' => 0, 'game' => '2019-08-21, 13:15, 7:11', 'match_id' => 26 }, userid3 => {} }, ... }
+    my %cross_detail; # { userid1 => { userid2 => { sorting: undef, win: 1, game_win: 0, game_lose: 2, point_win: 23, point_lose: 33}, ...}, ... }
+    my %scores;
     foreach my $m ($matches->@*) {
-        my $game = "$m->{date}, " . join(', ', map {; "$_->{win}:$_->{lose}" } $m->{games}->@*);
-        my $game2 = "$m->{date}, " . join(', ', map {; "$_->{lose}:$_->{win}" } $m->{games}->@*);
+        my @games = $m->{games}->@*;
+        my $game = "$m->{date}, " . join(', ', map {; "$_->{win}:$_->{lose}" } @games);
+        my $game2 = "$m->{date}, " . join(', ', map {; "$_->{lose}:$_->{win}" } @games);
+        my $point_win = sum0( map {; $_->{win} } $m->{games}->@* );
+        my $point_lose = sum0( map {; $_->{lose} } $m->{games}->@* );
         $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id}, game => $game };
         $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id}, game => $game2 };
+        $cross_detail{$m->{userid}}->{$m->{userid2}} = { win => 1, game_win => $m->{game_win}, game_lose => $m->{game_lose}, point_win => $point_win, point_lose => $point_lose };
+        $cross_detail{$m->{userid2}}->{$m->{userid}} = { win => 0, game_lose => $m->{game_win}, game_win => $m->{game_lose}, point_win => $point_lose, point_lose => $point_win };
         $scores{$m->{userid}} += 2;
         $scores{$m->{userid2}} += 1;
         push @userids, { userid => $m->{userid} };
         push @userids, { userid => $m->{userid2} };
     }
-    my %users = map{; $_->{userid} => 1 } @userids;
-    # http://www.ctsports.com.cn/mobile/index.php?m=default&c=article&a=info&aid=16113&u=0
-    # 楚天乒乓球教程：乒乓球规则关于单循环赛名词的确定
-    my @sort_users = sort { $scores{$b} <=> $scores{$a} } keys %users;
+    my @users = keys { map{; $_->{userid} => 1 } @userids }->%*;
+    compare_users(\@users, \%cross_detail);
+    # 1st sort by scores etc desc, then sort by userid asc
+    my @sort_users = sort { $cross_detail{$b}->{$a}->{sorting} // $a cmp $b } @users;
     my @results; # ( {userid => 'a', 'a' => 'N/A', 'b' => '2:0', 'c' => '3:1', ... '_score' => 10}, ... )
     foreach my $u1 ( @sort_users ) {
         my %r = ( userid => $u1, _name => $name{$u1}, _score => $scores{$u1} );
@@ -583,19 +653,12 @@ sub getUserList() {
     { success=>!$db->{error}, users=>\@val };
 }
 
-sub main_page($q) {
-    print "<script type='text/javascript'>//<![CDATA[\n" .
-        "Ext.onReady(TT.app.main_page, TT.app);" .
-        "\n//]]></script>\n";
-    print $q->end_html();
-}
-
 sub printheader($q) {
     print $q->header( -charset=>'utf-8',
                       -expires=>'now',
                     );
     my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n" .
-                      "var more='';\n";
+                      "var debug='$settings::debug';\nvar more='';\n";
     print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
                          -author=>'Opera.Wang',
@@ -649,7 +712,7 @@ sub main() {
         }
     } else {
         printheader($q);
-        main_page($q);
+        print $q->end_html();
     }
     $db->disconnect();
     exit 0;

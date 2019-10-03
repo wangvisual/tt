@@ -445,6 +445,11 @@ TT.app = function() {
                       displayField: 'full_name', valueField: 'userid', hiddenName: 'userid1', listeners: {
                           select: function(combo, record, index) {
                               Ext.getCmp('user1_avatar').getEl().dom.src = getAvatar(record.data);
+                          },
+                          change: function(combo, n, o) {
+                              var record = userList.getById(n);
+                              if ( !record ) return;
+                              Ext.getCmp('user1_avatar').getEl().dom.src = getAvatar(record.data);
                           }
                       },
                     },
@@ -456,6 +461,11 @@ TT.app = function() {
                       store: userList2,
                       displayField: 'full_name', valueField: 'userid', hiddenName: 'userid2', listeners: {
                           select: function(combo, record, index) {
+                              Ext.getCmp('user2_avatar').getEl().dom.src = getAvatar(record.data);
+                          },
+                          change: function(combo, n, o) {
+                              var record = userList.getById(n);
+                              if ( !record ) return;
                               Ext.getCmp('user2_avatar').getEl().dom.src = getAvatar(record.data);
                           }
                       },
@@ -699,6 +709,8 @@ TT.app = function() {
                     text:"删除系列赛",
                     handler: function(){ Ext.Msg.alert('错误', '没有实现这个功能'); }
                 },
+                '-',
+                { text:"记录比赛结果", handler: function() { editMatch(); } },
                 '-',
             ]
         });
@@ -971,6 +983,7 @@ TT.app = function() {
                 r = r + ": " + response.statusText;
             }
             logpanel.log(r);
+            msgpanel.msg(r);
         },
 
         main_page: function(){
@@ -1049,7 +1062,7 @@ TT.app = function() {
                 split: true,
                 border: true,
                 collapsible: true,
-                //collapsed: true,
+                collapsed: !debug,
                 width: 120,
                 minSize: 120,
                 maxSize: 400,
@@ -1098,4 +1111,6 @@ TT.app = function() {
         }
     };
 }();
+
+Ext.onReady(TT.app.main_page, TT.app);
 
