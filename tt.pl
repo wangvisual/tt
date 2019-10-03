@@ -658,7 +658,7 @@ sub printheader($q) {
                       -expires=>'now',
                     );
     my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n" .
-                      "var debug='$settings::debug';\nvar more='';\n";
+                      "var debug=$settings::debug;\nvar more='';\n";
     print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
                          -author=>'Opera.Wang',

@@ -1,3 +1,4 @@
+// TODO, replace this with DB
 more = `
 <div id='more'>
     <div>积分:</br>
@@ -27,7 +28,8 @@ more = `
         </br>
         <a target='_blank' href='https://www.meipian.cn/2csqliz8'>中篇</a>
         </br>
-        <a target='_blank' href='https://www.meipian.cn/2dv1z5sn'>视频</a>
+        <a target='_blank' href='https://www.meipian.cn/2dv1z5sn'>男单视频</a>
+        <a target='_blank' href='https://www.meipian.cn/2dvcmclo'>女单视频</a>
     </div>
 
 </div>
