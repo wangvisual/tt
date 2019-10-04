@@ -915,7 +915,7 @@ TT.app = function() {
             border: false,
             frame: true,
             renders: {
-                renderColumn: function(value, metadata, record) {
+                renderRatio: function(value, metadata, record) {
                     if ( typeof(value) != 'object' ) {
                         metadata.css = metadata.css +" diagonalFalling";
                         return '';
@@ -929,6 +929,13 @@ TT.app = function() {
                         metadata.attr = 'ext:qtip="' + value.game + '"';
                     }
                     return value.result;
+                },
+                renderScore: function(value, metadata, record) {
+                    if ( !value || typeof(value) != 'object' ) {
+                        value = { value: 0 };
+                    }
+                    metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 共:' + (value.total || 0) + '"';
+                    return value.value;
                 },
             },
         });

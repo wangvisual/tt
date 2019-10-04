@@ -483,7 +483,7 @@ sub getSeriesMatch() {
     my $matches = $data->{matches}; # [ { userid, userid2, win, lose, games => [win, lose, game_number, game_id, userid] }, ... ]
     my %cross; # { userid1 => { userid2 => { 'result' => '0:2', 'win' => 0, 'game' => '2019-08-21, 13:15, 7:11', 'match_id' => 26 }, userid3 => {} }, ... }
     my %cross_detail; # { userid1 => { userid2 => { sorting: undef, win: 1, game_win: 0, game_lose: 2, point_win: 23, point_lose: 33}, ...}, ... }
-    my %scores;
+    my %score_detail; #
     foreach my $m ($matches->@*) {
         my @games = $m->{games}->@*;
         my $game = "$m->{date}, " . join(', ', map {; "$_->{win}:$_->{lose}" } @games);
@@ -494,8 +494,12 @@ sub getSeriesMatch() {
         $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id}, game => $game2 };
         $cross_detail{$m->{userid}}->{$m->{userid2}} = { win => 1, game_win => $m->{game_win}, game_lose => $m->{game_lose}, point_win => $point_win, point_lose => $point_lose };
         $cross_detail{$m->{userid2}}->{$m->{userid}} = { win => 0, game_lose => $m->{game_win}, game_win => $m->{game_lose}, point_win => $point_lose, point_lose => $point_win };
-        $scores{$m->{userid}} += 2;
-        $scores{$m->{userid2}} += 1;
+        $score_detail{$m->{userid}}->{value} += 2;
+        $score_detail{$m->{userid2}}->{value} += 1;
+        $score_detail{$m->{userid}}->{win} += 1;
+        $score_detail{$m->{userid2}}->{lose} += 1;
+        $score_detail{$m->{userid}}->{total} += 1;
+        $score_detail{$m->{userid2}}->{total} += 1;
         push @userids, { userid => $m->{userid} };
         push @userids, { userid => $m->{userid2} };
     }
@@ -505,14 +509,14 @@ sub getSeriesMatch() {
     my @sort_users = sort { $cross_detail{$b}->{$a}->{sorting} // $a cmp $b } @users;
     my @results; # ( {userid => 'a', 'a' => 'N/A', 'b' => '2:0', 'c' => '3:1', ... '_score' => 10}, ... )
     foreach my $u1 ( @sort_users ) {
-        my %r = ( userid => $u1, _name => $name{$u1}, _score => $scores{$u1} );
+        my %r = ( userid => $u1, _name => $name{$u1}, _score => $score_detail{$u1} );
         foreach my $u2 ( @sort_users ) {
             $r{$u2} = $cross{$u1}->{$u2} // ( $u1 eq $u2 ? '' : {} );
         }
         push @results, \%r;
     }
-    my @columns = map {; { header =>  $name{$_}, dataIndex => $_, renderer => 'renderColumn' } } @sort_users;
-    push @columns, { header =>  '分数', dataIndex => '_score' };
+    my @columns = map {; { header =>  $name{$_}, dataIndex => $_, renderer => 'renderRatio' } } @sort_users;
+    push @columns, { header =>  '分数', dataIndex => '_score', renderer => 'renderScore' };
     unshift @columns, { header => '姓名', dataIndex => '_name' };
     my %meta = ( root => 'results', id => 'userid', fields => [ map{; {name => $_->{dataIndex}} } @columns] );
     { success => 1, metaData => \%meta, columns => \@columns, results => \@results };
