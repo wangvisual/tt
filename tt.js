@@ -131,6 +131,8 @@ TT.app = function() {
         {name: 'logintype', type: 'int'},
         {name: 'win', type: 'int'},
         {name: 'lose', type: 'int'},
+        {name: 'game_win', type: 'int'},
+        {name: 'game_lose', type: 'int'},
         {name: 'siries', type: 'int'},
         {name: 'point', type: 'int', sortDir: 'DESC'}
     ]);
@@ -532,7 +534,7 @@ TT.app = function() {
         });
         var mycm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
-            {header: 'ID', width: 0, dataIndex: 'userid', hidden: true},
+            {header: 'ID', width: 50, dataIndex: 'userid', hidden: true},
             // the header below is a special blank character
             {header: '　', width: 0, dataIndex: 'employeeNumber', id: 'avatar', renderer: function(value, metadata, record) {
                 var img = getAvatar(record.data);
@@ -541,10 +543,12 @@ TT.app = function() {
             }},
             {header: '姓名', width: 100, sortable: true, dataIndex: 'cn_name'},
             {header: '外号', width: 120, sortable: true, dataIndex: 'nick_name'},
-            {header: '性别', width: 100, sortable: true, dataIndex: 'gender'},
-            {header: '胜', width: 70, sortable: true, dataIndex: 'win'},
-            {header: '负', width: 70, sortable: true, dataIndex: 'lose'},
-            {header: '分数', width: 70, sortable: true, dataIndex: 'point'}
+            {header: '性别', width: 50, sortable: true, dataIndex: 'gender'},
+            {header: '胜', width: 50, sortable: true, dataIndex: 'win'},
+            {header: '负', width: 50, sortable: true, dataIndex: 'lose'},
+            {header: '胜局', width: 50, sortable: true, dataIndex: 'game_win'},
+            {header: '负局', width: 50, sortable: true, dataIndex: 'game_lose'},
+            {header: '分数', width: 50, sortable: true, dataIndex: 'point'}
         ]);
 
         grid = new Ext.grid.GridPanel({

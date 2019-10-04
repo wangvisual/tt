@@ -154,12 +154,13 @@ sub getPointList() {
     my $fail = { success=>0, users => [] };
     my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
     return $fail if $db->{err};
-    my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
+    my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, sum(game_win) AS game_win, sum(game_lose) AS game_lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
     return $fail if $db->{err};
     my $user = {}; # { weiw => { win => 0, fail => 1 } }
-    foreach (@win) {
-        $user->{$_->{userid}}->{win} = $_->{win};
-        $user->{$_->{userid}}->{lose} = $_->{lose};
+    foreach my $detail (@win) {
+        foreach (qw(win lose game_win game_lose)) {
+            $user->{$detail->{userid}}->{$_} = $detail->{$_};
+        }
     }
     if ( $siries_id && $stage >= 0 ) {
         my @siries = $db->exec('SELECT userid FROM SERIES_USERS WHERE siries_id=? AND stage=?;', [$siries_id, $stage], 1);
@@ -168,7 +169,7 @@ sub getPointList() {
             $user->{$_->{userid}}->{siries} = 1;
         }
     }
-    foreach my $p ( qw(win lose siries) ) {
+    foreach my $p ( qw(win lose game_win game_lose siries) ) {
         foreach (@users) {
             $_->{$p} = $user->{$_->{userid}}->{$p} // 0;
         }
