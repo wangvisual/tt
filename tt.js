@@ -551,8 +551,7 @@ TT.app = function() {
             {header: '分数', width: 50, sortable: true, dataIndex: 'point'}
         ]);
 
-        grid = new Ext.grid.GridPanel({
-            ...grid_default,
+        grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
             title : '积分概览',
@@ -562,7 +561,7 @@ TT.app = function() {
                     editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
                 },
             },
-        });
+        }));
 
         if ( siries_id ) {
             grid.getSelectionModel().on({
@@ -718,10 +717,9 @@ TT.app = function() {
                 '-',
             ]
         });
-        var grid = new Ext.grid.GridPanel({
+        var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
-            ...grid_default,
             title : '系列赛',
             id: 'sirieslist',
             tbar: toolbar,
@@ -730,7 +728,7 @@ TT.app = function() {
                     editSeries(g.getStore().getAt(rowIndex).get('siries_id'));
                 },
             },
-        });
+        }));
 
         listpanel.removeAll(true);
         listpanel.add(grid);
@@ -824,10 +822,9 @@ TT.app = function() {
                 },
             ]
         });
-        var grid = new Ext.grid.GridPanel({
+        var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
-            ...grid_default,
             title : '比赛结果',
             id: 'matcheslist',
             tbar: toolbar,
@@ -835,7 +832,7 @@ TT.app = function() {
                 forceFit: true,
                 groupTextTpl: '{text} ({[values.rs.length]} {["场"]})'
             }),
-        });
+        }));
 
         listpanel.removeAll(true);
         listpanel.add(grid);
@@ -885,10 +882,9 @@ TT.app = function() {
                 '-',
             ]
         });
-        var grid = new Ext.grid.GridPanel({
+        var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
-            ...grid_default,
             title : '所有人员信息',
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
@@ -896,7 +892,7 @@ TT.app = function() {
                 },
             },
             tbar: toolbar,
-        });
+        }));
 
         listpanel.removeAll(true);
         listpanel.add(grid);
