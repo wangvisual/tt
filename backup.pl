@@ -8,7 +8,7 @@ use POSIX qw(strftime);
 my $backup = strftime("%A", localtime);
 
 chdir($RealBin);
-$ENV{PATH} = ".";
+$ENV{PATH} = "/bin:.";
 
 my $cmd = "sqlite3 db/$ENV{USER}.db '.backup db/$backup.db'";
 system($cmd);

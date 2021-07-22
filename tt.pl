@@ -103,11 +103,11 @@ sub get_multi_param($name, $default = undef) {
 sub isAdmin($id=$userid) {
     my @val = $db->exec('SELECT logintype FROM USERS WHERE userid=?;', [$id], 1);
     return 0 if $db->{err} || scalar @val == 0;
-    return 1 if $val[0]->{logintype} == 0;
+    return !$val[0]->{logintype} if scalar @val != 0;
     # or there's no admin yet
     my @anyone = $db->exec('SELECT count(logintype) AS c FROM USERS WHERE logintype=?;', [0], 1);
     return 0 if $db->{err} || scalar @anyone == 0;
-    !$val[0]->{c};
+    !$anyone[0]->{c};
 }
 
 sub editUser() {
