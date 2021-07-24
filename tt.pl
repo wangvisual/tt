@@ -59,7 +59,7 @@ sub getUserInfo($uid = undef) {
     # In DB?
     my @res = $db->exec( "SELECT userid, name, cn_name, nick_name, email, logintype, gender, point FROM USERS WHERE USERID=?", [$uid], 1 );
     return $fail if scalar @res > 1;
-    return {success=>1, user=>[$res[0]]} if scalar @res == 1;
+    return {success=>1, db=>1, user=>[$res[0]]} if scalar @res == 1;
 
     # Try LDAP if not found in db
     my ($ldap, $mesg, $email, $name, $employeeNumber);
@@ -80,10 +80,7 @@ sub getUserInfo($uid = undef) {
     }
     $mesg = $ldap->unbind;
 
-    # Save to DB if not in.
-    $db->exec( "INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?);", [$uid, $name, $email, $employeeNumber, 1, '未知', '0'], 0 );
-
-    { success=>1, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => 1, gender=> '未知', point => 0}] };
+    { success=>1, db=>0, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => 1, gender=> '未知', point => 0}] };
 }
 
 sub getGeneralInfo() {
@@ -113,32 +110,28 @@ sub isAdmin($id=$userid) {
 sub editUser() {
     my $id = get_param('userid');
     return { success=>0, msg=>'Invalid input' } if !$id;
-    getUserInfo($id);
     my $nick_name = get_param('nick_name', '');
     my $cn_name = get_param('cn_name', '');
     my $logintype = get_param('logintype', 1); # normal
     my $gender = get_param('gender', 'Male');
     my $point = get_param('point') || 0;
 
-    my $admin;
+    my $admin = isAdmin($userid);
     # check permissions, only admin can set another as admin/change point directly
-    return { success=>0, msg=>"Permission denied, Can't change ${id}'s value" } if $id ne $userid && ! ($admin = isAdmin($userid));
-    if ( $logintype == 0 ) {
-        $admin //= isAdmin($userid);
-        return { success=>0, msg=>"Permission denied, Can't set $id as admin" } if !$admin;
+    if ( !$admin ) {
+        return { success=>0, msg=>"Permission denied, Can't change ${id}'s value" } if $id ne $userid;
+        return { success=>0, msg=>"Permission denied, Can't set $id as admin" } if $logintype == 0;
+        return { success=>0, msg=>"Permission denied, Can't set ${id}'s point" } if $point > 0;
     }
-    if ( $point > 0 ) {
-        $admin //= isAdmin($userid);
-        if ( !$admin ) {
-            my @val = $db->exec('SELECT point FROM USERS WHERE userid=?;', [$id], 1);
-            my $original_point_zero = ( $val[0]->{point} == 0 );
-            $point = 0 if $val[0]->{point} == $point; # no need to update point
-            return { success=>0, msg=>"Permission denied, Can't set ${id}'s point" } if $point > 0 && !$original_point_zero;
-        }
+
+    my $userInfo = getUserInfo($id);
+    my $success = $userInfo->{success};
+    if ( $success ) {
+        $db->exec("INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?) ON CONFLICT(userid) DO NOTHING;",
+            [$id, @{$userInfo->{user}[0]}{qw(name email employeeNumber logintype gender point)}], 0 ) if !$userInfo->{db};
+        $db->exec('UPDATE USERS set nick_name=?,cn_name=?,logintype=?,gender=? where userid=?;', [$nick_name, $cn_name, $logintype, $gender, $id], 0) if !$db->{err};
+        $success = 0 if $db->{err};
     }
-    my $success = 1;
-    $db->exec('UPDATE USERS set nick_name=?,cn_name=?,logintype=?,gender=? where userid=?;', [$nick_name, $cn_name, $logintype, $gender, $id], 0);
-    $success = 0 if $db->{err};
 
     if ( $success && $point > 0 ) {
         $db->exec('UPDATE USERS set point=? where userid=?;', [$point, $id], 0);
@@ -152,7 +145,7 @@ sub getPointList() {
     my $siries_id = get_param('siries_id') || 0;
     my $stage = get_param('stage') || 0;
     my $fail = { success=>0, users => [] };
-    my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? AND point>? ORDER BY userid ASC;', [1,0], 1);
+    my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? ORDER BY userid ASC;', [1], 1);
     return $fail if $db->{err};
     my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, sum(game_win) AS game_win, sum(game_lose) AS game_lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
     return $fail if $db->{err};

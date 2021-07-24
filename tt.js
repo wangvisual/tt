@@ -6,7 +6,7 @@ TT.app = function() {
     // const
     var perPage = 40;
     var tturl = './';
-    var loginTypes = [ [0, '管理员'], [1, '一般用户'], [2, '无效用户'] ];
+    var loginTypes = [ [0, '管理员'], [1, '普通用户'], [2, '非法用户'] ];
     var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [100, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
     var grid_default = {
@@ -19,7 +19,8 @@ TT.app = function() {
         },
     };
 
-    var userid = '';
+    var currentUserID = '';
+    var logintype = 0;
     var ulds; // UserList Data Store
     var shopds; // Shop Data Store
     var spinner;
@@ -137,16 +138,14 @@ TT.app = function() {
         {name: 'point', type: 'int', sortDir: 'DESC'}
     ]);
 
-    var editUserInfo = function(userid) {
+    var editUserInfo = function(editUserID) {
 
         function editUserChanged(panel, valid){
             var u = Ext.getCmp('edituserid');
+            var p = Ext.getCmp('editpoint');
             var s = Ext.getCmp('editusersubmit');
-            if ( u.originalValue == '' ) {
-                u.setReadOnly(false);
-            } else {
-                u.setReadOnly(true);
-            }
+            u.setReadOnly(u.originalValue != '');
+            p.setReadOnly(logintype != 0);
             if ( valid && formIsDirty('edituserpanel') ) {
                 s.enable();
             } else {
@@ -155,8 +154,8 @@ TT.app = function() {
         }
 
         function reloadUserPanel(p){
-            if (typeof(userid) != 'undefined' && userid != '') {
-                p.form.load({params: {action: 'getUserInfo', userid: userid}, waitMsg: 'Loading...' });
+            if (typeof(editUserID) != 'undefined' && editUserID != '') {
+                p.form.load({params: {action: 'getUserInfo', userid: editUserID}, waitMsg: 'Loading...' });
             }
         }
 
@@ -174,7 +173,7 @@ TT.app = function() {
             labelAlign: 'right',
             defaultType: 'textfield',
             items: [
-                { fieldLabel: 'account', name: 'userid', id: 'edituserid', allowBlank: false, readOnly: true },
+                { fieldLabel: 'ID', name: 'userid', id: 'edituserid', allowBlank: false, readOnly: true },
                 { fieldLabel: '姓名', name: 'cn_name', allowBlank: true },
                 { fieldLabel: '外号', name: 'nick_name', allowBlank: true },
                 { fieldLabel: '类型', xtype: 'combo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
@@ -212,6 +211,7 @@ TT.app = function() {
                 handler: function(){fp.getForm().reset();}
             }]
         });
+        if ( logintype != 0 && ( typeof(editUserID) == 'undefined' || editUserID != currentUserID ) ) fp.setDisabled(true);
 
         var win = new Ext.Window({
             title: '编辑人员',
@@ -322,7 +322,7 @@ TT.app = function() {
                 Ext.get('infogender').dom.innerHTML = '';
                 Ext.get('infopoint').dom.innerHTML = '';
             } else {
-                Ext.get('infoname').dom.innerHTML = "Welcome " + n.name;
+                Ext.get('infoname').dom.innerHTML = "欢迎" + loginTypes[n.logintype][1] + " " + n.name;
                 Ext.get('infoemail').dom.innerHTML = n.email;
                 Ext.get('infogender').dom.innerHTML = "性别: " + n.gender;
                 Ext.get('infopoint').dom.innerHTML = "积分: " + n.point;
@@ -334,7 +334,8 @@ TT.app = function() {
            method: 'POST',
            success: function ( result, request) {
                     var jsonData = Ext.util.JSON.decode(result.responseText);
-                    userid = jsonData.user[0].userid;
+                    currentUserID = jsonData.user[0].userid;
+                    logintype = jsonData.user[0].logintype;
                     changeTxt(jsonData.user[0]);
                 },
            failure: function () { changeTxt("Failed"); },
@@ -807,7 +808,7 @@ TT.app = function() {
             items:[
                 { text:"记录比赛结果", handler: function() { editMatch(); } },
                 '-',
-                { text:"我的比赛", handler: function () { showMatches(userid); } },
+                { text:"我的比赛", handler: function () { showMatches(currentUserID); } },
                 '-',
                 { text:"所有比赛", handler: function () { showMatches(); } },
                 '-',
@@ -877,11 +878,13 @@ TT.app = function() {
             items:[
                 {
                     text:"添加人员",
+                    id:'newUser',
                     handler: function(){ editUserInfo(); }
                 },
                 '-',
             ]
         });
+        if ( logintype != 0 ) Ext.getCmp('newUser').disable();
         var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
@@ -1038,10 +1041,10 @@ TT.app = function() {
                 html: more,
                 items: [{
                     text: '我的信息',
-                    handler: function () { editUserInfo(userid); }
+                    handler: function () { editUserInfo(currentUserID); }
                 },{
                     text: '我的比赛',
-                    handler: function () { showMatches(userid); }
+                    handler: function () { showMatches(currentUserID); }
                 },{
                     text: '积分概览',
                     handler: function () { showPointList(); }
