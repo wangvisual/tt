@@ -11,6 +11,26 @@ td.diagonalFalling {
     background-image: linear-gradient(to top right,  transparent calc(50% - 1px), black, transparent calc(50% + 1px));
 }
 
+div.Disable {
+    color: lightgray;
+}
+
+div.Platinum {
+    color: #5A2A82;
+}
+
+div.Gold {
+    color: #B8860B;
+}
+
+div.Silver {
+    color: #848482;
+}
+
+div.Bronze {
+    color: #B87333;
+}
+
 #spinner * {
     background-color: transparent;
 }

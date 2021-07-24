@@ -32,6 +32,16 @@ TT.app = function() {
     Ext.form.Field.prototype.msgTarget = 'side';
 
     // classes
+    var getClass = function(record) {
+        var point = record.get('point');
+        var logintype = record.get('logintype');
+        if ( logintype == 2 ) return 'Disable';
+        if ( point >= 1700 ) return 'Platinum';
+        if ( point >= 1600 ) return 'Gold';
+        if ( point >= 1500 ) return 'Silver';
+        return 'Bronze';
+    };
+
     // copy from debug.js
     var LogPanel = Ext.extend(Ext.Panel, {
         autoScroll: true,
@@ -549,7 +559,7 @@ TT.app = function() {
             {header: '负', width: 50, sortable: true, dataIndex: 'lose'},
             {header: '胜局', width: 50, sortable: true, dataIndex: 'game_win'},
             {header: '负局', width: 50, sortable: true, dataIndex: 'game_lose'},
-            {header: '分数', width: 50, sortable: true, dataIndex: 'point'}
+            {header: '分数', width: 50, sortable: true, dataIndex: 'point'},
         ]);
 
         grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
@@ -560,6 +570,12 @@ TT.app = function() {
             listeners: {
                 'rowdblclick': function(g, rowIndex, e) {
                     editUserInfo( g.getStore().getAt(rowIndex).get('userid') );
+                },
+            },
+            viewConfig: {
+                forceFit: true,
+                getRowClass: function(record, index) {
+                    return getClass(record);
                 },
             },
         }));
@@ -740,7 +756,7 @@ TT.app = function() {
         var userList = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
-            baseParams: {action: 'getUserList', filter: 'valid'},
+            baseParams: {action: 'getUserList'},
             autoLoad: true,
             autoDestroy: true,
             root: 'users',
@@ -895,6 +911,12 @@ TT.app = function() {
                 },
             },
             tbar: toolbar,
+            viewConfig: {
+                forceFit: true,
+                getRowClass: function(record, index) {
+                    return getClass(record);
+                },
+            },
         }));
 
         listpanel.removeAll(true);
