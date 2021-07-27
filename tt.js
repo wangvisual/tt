@@ -31,11 +31,9 @@ TT.app = function() {
     Ext.QuickTips.init();
     Ext.form.Field.prototype.msgTarget = 'side';
 
-    // classes
     var getClass = function(record) {
+        if ( record.get('logintype') == 2 ) return 'Disable';
         var point = record.get('point');
-        var logintype = record.get('logintype');
-        if ( logintype == 2 ) return 'Disable';
         if ( point >= 1700 ) return 'Platinum';
         if ( point >= 1600 ) return 'Gold';
         if ( point >= 1500 ) return 'Silver';
@@ -145,7 +143,8 @@ TT.app = function() {
         {name: 'game_win', type: 'int'},
         {name: 'game_lose', type: 'int'},
         {name: 'siries', type: 'int'},
-        {name: 'point', type: 'int', sortDir: 'DESC'}
+        {name: 'point', type: 'int', sortDir: 'DESC'},
+        {name: 'group', type: 'int'},
     ]);
 
     var editUserInfo = function(editUserID) {
@@ -371,7 +370,7 @@ TT.app = function() {
         var userList = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
-            baseParams: {action: 'getUserList', filter: 'valid'},
+            baseParams: {action: 'getUserList', filter: 'valid'}, // TODO, get user for this
             autoLoad: true,
             autoDestroy: true,
             root: 'users',
@@ -519,7 +518,7 @@ TT.app = function() {
         win.doLayout();
     };
 
-    var showPointList = function(siries_id, siries_name, stage) {
+    var showPointList = function(siries_id, siries_name, stage, number_of_groups) {
         var myReader = new Ext.data.JsonReader({
             root:'users',
             id: 'userid'
@@ -537,13 +536,14 @@ TT.app = function() {
             reader: myReader,
             listeners : {
                 'load': function(store, records) {
-                    original_records = records.filter(record => record.data.siries > 0);
+                    original_records = records.filter(record => record.data.siries > 0); // the one that in this siries;
                     grid.getSelectionModel().selectRecords(original_records, false);
+                    // if ( siries_id ) mycm.setConfig(mycmconfig); // if we need change the config dynamically
                 },
             },
             sortInfo: {field: 'point', direction: 'DESC'}
         });
-        var mycm = new Ext.grid.ColumnModel([
+        var mycmconfig = [
             new Ext.grid.RowNumberer(),
             {header: 'ID', width: 50, dataIndex: 'userid', hidden: true},
             // the header below is a special blank character
@@ -560,11 +560,29 @@ TT.app = function() {
             {header: '胜局', width: 50, sortable: true, dataIndex: 'game_win'},
             {header: '负局', width: 50, sortable: true, dataIndex: 'game_lose'},
             {header: '分数', width: 50, sortable: true, dataIndex: 'point'},
-        ]);
+        ];
+        var selModel;
+        if ( siries_id ) {
+            selModel = new Ext.grid.CheckboxSelectionModel({ checkOnly : true });
+            if ( !number_of_groups ) number_of_groups = 1;
+            var group_column = {header: '小组', id: 'group', width: 120, sortable: true, xtype: "radiogroupcolumn", dataIndex : "group", radioValues : [], };
+            for ( var i = 1; i <= number_of_groups; i++ ) {
+                group_column.radioValues.push(i);
+            }
+            mycmconfig.forEach( function(element) {
+                if ( element.header.match(/胜|负/) ) element.hidden = true;
+            });
+            mycmconfig.unshift(selModel);
+            mycmconfig.push(group_column);
+        } else {
+            selModel = new Ext.grid.RowSelectionModel();
+        }
+        var mycm = new Ext.grid.ColumnModel(mycmconfig);
 
-        grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
+        var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,
+            sm: selModel,
             title : '积分概览',
             id: 'pointlist',
             listeners: {
@@ -581,28 +599,26 @@ TT.app = function() {
         }));
 
         if ( siries_id ) {
-            grid.getSelectionModel().on({
-                'selectionchange': {
-                    fn: function() {
-                        var s = Ext.getCmp('add_user_to_siries_submit');
-                        if ( s ) {
-                            var current = grid.getSelectionModel().getSelections();
-                            if ( current.length != original_records.length ) {
-                                return s.enable();
-                            }
-                            var original_users = new Object;;
-                            original_records.map( x => original_users[x.data.userid] = 1 );
-                            for ( var i = current.length - 1; i >= 0; i-- ) {
-                                if ( !original_users[current[i].data.userid] ) {
-                                    return s.enable();
-                                }
-                            }
-                            s.disable();
-                        }
-                    },
-                    scope: this,
-                    delay: 0
-            }});
+            function checkSubmit() {
+                var s = Ext.getCmp('add_user_to_siries_submit');
+                if ( !s ) return;
+                var current = grid.getSelectionModel().getSelections();
+                if ( current.length != original_records.length ) {
+                    return s.enable();
+                }
+                var original_users = new Object;;
+                original_records.map( x => original_users[x.data.userid] = 1 );
+                for ( var i = current.length - 1; i >= 0; i-- ) {
+                    if ( !original_users[current[i].data.userid] ) {
+                        return s.enable();
+                    } else if ( current[i].modified && current[i].modified.group && current[i].modified.group != current[i].data.group ) {
+                        return s.enable();
+                    }
+                }
+                s.disable();
+            };
+            grid.getSelectionModel().on({ 'selectionchange': { fn: checkSubmit, scope: this, delay: 0 }});
+            grid.getStore().on({ 'update': { fn: checkSubmit } });
             var fp = new Ext.FormPanel({
                 url: tturl,
                 method: 'POST',
@@ -620,19 +636,19 @@ TT.app = function() {
                     text: 'Save', xtype: 'button', id: 'add_user_to_siries_submit', type: 'submit', disabled: true,
                     handler: function(){
                         fp.getForm().submit({
-                            params: {action: 'editSeriesUser', siries_id: siries_id, stage: stage, users: grid.getSelectionModel().getSelections().map( x => x.data.userid )},
+                            params: {action: 'editSeriesUser', siries_id: siries_id, stage: stage, users: grid.getSelectionModel().getSelections().map( x => [x.data.userid, x.data.group ])}, // userid1,2 userid2,3
                             success: function(...args) {results(...args); showSeries(); win.close();},
                             failure: results,
                         });
                     }
                 },{
-                    text: 'Reset', xtype: 'button', type: 'reset',
-                    handler: function() { grid.getSelectionModel().selectRecords(original_records, false); },
+                    text: 'Reload', xtype: 'button', type: 'reset',
+                    handler: function() { myds.reload(); },
                 }]
             });
 
             var win = new Ext.Window({
-                title: "报名比赛 " + siries_name + ' 按住Ctrl键或Shift键多选',
+                title: "报名比赛 " + siries_name,
                 width: 800,
                 modal: true,
                 items: [fp]
@@ -689,10 +705,7 @@ TT.app = function() {
             {header: '当前阶段人数', sortable: true, dataIndex: 'count'},
             {xtype: 'actioncolumn', header: '报名', items: [{icon: 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
-                var siries_id = record.get('siries_id');
-                var siries_name = record.get('siries_name');
-                var stage = record.get('stage');
-                showPointList(siries_id, siries_name, stage);
+                showPointList(record.get('siries_id'), record.get('siries_name'), record.get('stage'), record.get('number_of_groups'));
             }}]},
             {xtype: 'actioncolumn', header: '结果', items: [{icon: 'etc/cup.png', tooltip: '显示比赛结果', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);

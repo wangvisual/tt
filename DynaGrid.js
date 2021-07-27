@@ -56,3 +56,40 @@ Ext.ux.DynamicGridPanel = Ext.extend(Ext.grid.GridPanel, {
         this.store.load();
     }
 });
+
+// https://gist.github.com/onia/ce603b6e49d0883eb209
+/* original author: Alexander Berg, Hungary */
+Ext.grid.RadioGroupColumn = Ext.extend(Ext.grid.Column, {
+    xtype: 'radiogroupcolumn',
+    constructor: function(cfg){
+        Ext.grid.RadioGroupColumn.superclass.constructor.call(this, cfg);
+        this.renderer = function(value, metadata, record, rowIndex, colIndex, store) {
+            var column = this;
+            var name = "_auto_group_" + record.id;
+            var html = '';
+            if (column.radioValues) {
+                column.radioValues.forEach( function( radioValue ) {
+                    var radioDisplay;
+                    if (radioValue && radioValue.fieldValue) {
+                        radioDisplay = radioValue.fieldDisplay;
+                        radioValue = radioValue.fieldValue;
+                    } else {
+                        radioDisplay = radioValue;
+                    }
+                    html = html + "<input type='radio' name = '" + name + "' " + (radioValue == value ? "checked='checked'" : "") + " value='" + radioValue + "'>" + radioDisplay;
+                } );
+            }
+            return html;
+        };
+        this.addListener('click', function(me, g, rowIndex, e) {
+            if ( e && e.target && e.target.name && e.target.name.startsWith("_auto_group_") && e.target.value ) {
+                var record = g.getStore().getAt(rowIndex);
+                record.set(me.id, e.target.value); // change the record, set dirty/modified flag
+                if ( record.modified && record.modified[me.id] == e.target.value ) record.reject(); // reset to init
+            }
+        });
+    },
+});
+
+Ext.grid.Column.types.radiogroupcolumn = Ext.grid.RadioGroupColumn;
+

@@ -156,13 +156,14 @@ sub getPointList() {
         }
     }
     if ( $siries_id && $stage >= 0 ) {
-        my @siries = $db->exec('SELECT userid FROM SERIES_USERS WHERE siries_id=? AND stage=?;', [$siries_id, $stage], 1);
+        my @siries = $db->exec('SELECT userid,group_number FROM SERIES_USERS WHERE siries_id=? AND stage=?;', [$siries_id, $stage], 1);
         return $fail if $db->{err};
         foreach (@siries) {
             $user->{$_->{userid}}->{siries} = 1;
+            $user->{$_->{userid}}->{group} = $_->{group_number};
         }
     }
-    foreach my $p ( qw(win lose game_win game_lose siries) ) {
+    foreach my $p ( qw(win lose game_win game_lose siries group) ) {
         foreach (@users) {
             $_->{$p} = $user->{$_->{userid}}->{$p} // 0;
         }
@@ -612,28 +613,40 @@ sub editSeriesUser {
     my $siries_id = get_param('siries_id') || -1;
     my $stage = get_param('stage') // -1;
     return { success=>0, msg=>"系列赛ID不正确" } if $siries_id <= 0 || $stage < 0;;
-    my $users = {map {; $_ => 1 } get_multi_param('users', [])->@*};
-    my $old_users = {map {; $_->{userid} => 1 } $db->exec('SELECT userid FROM SERIES_USERS WHERE siries_id=? AND stage=?', [$siries_id, $stage], 1)};
-    my (@add_users, @delete_users);
+    return { success=>0, msg=>"已经过了报名阶段" } if $stage > 0 && !isAdmin();
+    my $users = {map {; my @g = split(/,/, $_, 2); $g[0] => $g[1]  } get_multi_param('users', [])->@*}; # { userid => group_number }
+    my $old_users = {map {; $_->{userid} =>  $_->{group_number}; } $db->exec('SELECT userid,group_number FROM SERIES_USERS WHERE siries_id=? AND stage=?', [$siries_id, $stage], 1)};
+    my (@add_users, @delete_users, @changed_users);
     foreach ( keys $old_users->%* ) {
         push @delete_users, $_ if !exists $users->{$_};
     }
     return { success => 0, msg => "为了防止误操作，每次最多删除两个报名人员" } if scalar @delete_users > 2;
     foreach ( keys $users->%* ) {
-        push @add_users, $_ if !exists $old_users->{$_};
+        if ( !exists $old_users->{$_} ) {
+            push @add_users, { id => $_, group => $users->{$_} };
+        } elsif ( $users->{$_} != $old_users->{$_} ) {
+            push @changed_users, { id => $_, group => $users->{$_} };
+        }
     }
-    if ( !isAdmin() && ( scalar @add_users > 1 || scalar @delete_users > 1
-                         || ( scalar @add_users == 1 && $add_users[0] != $userid ) || ( scalar @delete_users == 1 && $delete_users[0] != $userid ) ) ) {
+    if ( !isAdmin() && ( scalar @add_users > 1 || scalar @delete_users > 1 || scalar @changed_users > 1
+                         || ( scalar @add_users == 1 && $add_users[0]->{id} != $userid )
+                         || ( scalar @delete_users == 1 && $delete_users[0] != $userid )
+                         || ( scalar @changed_users == 1 && $changed_users[0]->{id} != $userid ) ) ) {
         return { success => 0, msg => '不能修改别人'  };
     }
     eval {
         $db->{dbh}->begin_work;
         foreach ( @delete_users ) {
-            $db->exec('DELETE FROM SERIES_USERS WHERE userid=? AND siries_id=? AND stage=?', [$_, $siries_id, $stage], 0, 0); # delete from all stages
+            $db->exec('DELETE FROM SERIES_USERS WHERE userid=? AND siries_id=? AND stage=?', [$_, $siries_id, $stage], 0, 0); # delete from current stage only
         }
         my $basePoint = getBasePoint($siries_id, 'users');
         foreach ( @add_users ) {
-            $db->exec( "INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point) VALUES(?,?,?,?);", [$siries_id, $stage, $_, $basePoint->{$_} // DEFAULT_POINT ], 0, 0 );
+            $db->exec( "INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, group_number, userid, original_point) VALUES(?,?,?,?);",
+                [$siries_id, $stage, $_->{group}, $_->{id}, $basePoint->{$_} // DEFAULT_POINT ], 0, 0 );
+        }
+        foreach ( @changed_users ) {
+            $db->exec( "UPDATE SERIES_USERS SET group_number=? WHERE siries_id=? AND stage=? AND userid=?;",
+                [$_->{group}, $siries_id, $stage, $_->{id}], 0, 0 );
         }
         $db->{dbh}->commit();
     };
@@ -641,7 +654,7 @@ sub editSeriesUser {
         $db->{dbh}->rollback();
         return { success => 0, msg => $db->{errstr} };
     }
-    { success => 1, msg=>"增加了" . scalar @add_users . "个人员，删除了" . scalar @delete_users . "个人员" }
+    { success => 1, msg=>"增加了" . scalar @add_users . "个人员，删除了" . scalar @delete_users . "个人员，修改了" . scalar @changed_users . "个人员" }
 }
 
 sub getUserList() {
