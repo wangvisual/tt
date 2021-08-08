@@ -14,6 +14,7 @@ use Encode;
 use CGI qw/:all/;
 use Data::Dumper;
 use Mail::Sendmail;
+use Scalar::Util;
 use JSON::XS;
 use Net::LDAP;
 use List::Util qw(sum0);
@@ -41,8 +42,10 @@ my $perPage = 40;
 # https://perldoc.perl.org/Encode/MIME/Header.html
 # http://hansekbrand.se/code/UTF8-emails.html
 sub send_html_email($to, $cc, $subject, $msg) {
+    my $from = $ENV{SERVER_ADMIN} // $ENV{USER} // 'unknown@test.com';
+    $from = $from . '@test.com' if $from !~ /@/; # send may fail but won't warning
     my %mail = (
-        From             => encode("MIME-Header", $settings::title) . ' <' . ($ENV{SERVER_ADMIN} // 'unknown') . '>',
+        From             => encode("MIME-Header", $settings::title) . "<$from>",
         To               => $to,
         Cc               => $cc,
         Subject          => encode("MIME-Header", $subject),
@@ -209,12 +212,14 @@ sub editMatch() {
     return { success => 0, msg => '非管理员不能修改比赛结果'  } if $match_id > 0 && !isAdmin();
     return { success => 0, msg => '管理员也不能修改比赛结果'  } if $match_id > 0;
     my $siries_id = get_param('siries_id') || -1;
+    my $group_number = get_param('group') || 1;
     my $date = get_param('date', ''); # 2019-08-17
     my $userid1 = get_param('userid1', '');
     my $userid2 = get_param('userid2', '');
     return { success => 0, msg => '输入信息不正确' } if $siries_id < 0 || !$date || !$userid1 || !$userid2 || $userid1 eq $userid2;
     my @series = $db->exec('SELECT siries_id, siries_name, stage FROM SERIES where siries_id=? and stage<?;', [$siries_id, STAGE_END], 1);
     return { success => 0, msg => '找不到合适的比赛项目' } if $db->{err} || scalar @series != 1;
+    my $stage = $series[0]->{stage};
     my @games; # ( [11, 7], [9, 11] )
     foreach my $i (1..7) {
         $games[$i][0] = get_param("game${i}_point1") || 0;
@@ -249,8 +254,6 @@ sub editMatch() {
     my $win = $win1 - $win2 > 0 ? 1 : 0;
     my $lose = 1 - $win;
 
-    # FIXME, use real stage and group
-    my $stage = $siries_id == 1 ? 0 : 1; my $group_number = 1;
     # update DB using transcation
     eval {
         $db->{dbh}->begin_work;
@@ -283,7 +286,7 @@ sub editMatch() {
 
     if ( $settings::mail ) {
         my $cc = '';
-        if ( $settings::mail >= 2 ) { # CC admin
+        if ( Scalar::Util::looks_like_number($settings::mail) && $settings::mail >= 2 ) { # CC admin
             my @admin = $db->exec('SELECT email FROM USERS WHERE logintype=?;', [0], 1);
             if ( !$db->{err} ) {
                 $cc = join(', ', map {; $_->{email} } @admin);
@@ -333,7 +336,7 @@ sub editMatch() {
     <p> 请访问<a href='$https://$settings::servername$ENV{REQUEST_URI}'>$settings::title</a>获得其它信息</p>
     </body>
 EOT
-        if ( $settings::mail =~ /@/ ) {
+        if ( $settings::mail =~ /@/ ) { # if set the mail to email address, only send to him/her, for debug purpose
             @to = split(/[,;]/, $settings::mail);
             $cc = '';
         }
@@ -352,15 +355,27 @@ sub getMatch() {
     { success=>1, match=>\@match };
 }
 
-sub getMatches($siries_id = undef, $stage = 1, $group_number = 1) {
+sub getMatches($siries_id = undef, $stage = undef, $group_number = undef) {
     my $id = get_param('userid');
-    my $filter = defined $siries_id ? "AND m.siries_id=? AND m.stage=? AND m.group_number=?" : '';
-    my $inputs = defined $siries_id ? [$siries_id, $stage, $group_number] : [];
+    my (@filters, @inputs) = ((), ());
+    if ( defined $siries_id ) {
+        push @filters, 'siries_id';
+        push @inputs, $siries_id;
+    }
+    if ( defined $stage ) {
+        push @filters, 'stage';
+        push @inputs, $stage;
+    }
+    if ( defined $group_number ) {
+        push @filters, 'group_number';
+        push @inputs, $group_number;
+    }
+    my $filter = join(' ', map{; "AND m.$_=?"} @filters); # "AND m.siries_id=? AND m.stage=? AND m.group_number=?"
     my $sql = 'SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
               'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
               'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
               "WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid $filter;";
-    my @matches = $db->exec($sql, $inputs, 1);
+    my @matches = $db->exec($sql, \@inputs, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
     my @games = $db->exec('SELECT * FROM GAMES WHERE win > lose;', undef, 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
@@ -702,6 +717,7 @@ sub check_server($q) {
 
 sub main() {
     $userid = $ENV{REMOTE_USER} // $ENV{USER}; # web use REMTOE_USER, console test use USER
+    $ENV{REQUEST_URI} //= 'unknown'; # for cmdline test
     $q = new CGI;
     check_server($q);
     $db = db->new();

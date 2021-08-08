@@ -40,6 +40,11 @@ TT.app = function() {
         return 'Bronze';
     };
 
+    var renderStage = function(value) {
+        var found = stageTypes.find(function(element) {return element[0] == value;});
+        return found ? found[1] : value;
+    };
+
     // copy from debug.js
     var LogPanel = Ext.extend(Ext.Panel, {
         autoScroll: true,
@@ -186,6 +191,9 @@ TT.app = function() {
                 { fieldLabel: '姓名', name: 'cn_name', allowBlank: true },
                 { fieldLabel: '外号', name: 'nick_name', allowBlank: true },
                 { fieldLabel: '类型', xtype: 'combo', name: 'logintypefake', allowBlank: false, editable: false, typeAhead: false,
+                  // https://stackoverflow.com/questions/986345/what-does-extjs-combobox-triggeraction-all-really-do
+                  // After choosing an item, the list is filtered to match the current text value.
+                  // triggerAction:'all' means do not filter, always show all values.
                   triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
                   store: new Ext.data.SimpleStore({
                          fields:['id', 'type']
@@ -360,7 +368,7 @@ TT.app = function() {
             autoLoad: true,
             autoDestroy: true,
             root: 'series',
-            fields: ['siries_id', 'siries_name']
+            fields: ['siries_id', 'siries_name', 'number_of_groups'],
         });
 
         var userList2 = new Ext.data.JsonStore({
@@ -381,6 +389,16 @@ TT.app = function() {
                     userList2.add(records.map( r => r.copy() ));
                 },
             },
+        });
+
+        var groups_store = new Ext.data.ArrayStore({
+            autoDestroy: false,
+            storeId: 'edit_group_store',
+            idIndex: 0,
+            fields: [
+               {name: 'number', type: 'int'},
+               {name: 'show'},
+            ],
         });
 
         function editMatchChanged(panel, valid){
@@ -420,6 +438,7 @@ TT.app = function() {
                 {name: 'match_id', type: 'int'},
                 {name: 'siries_id', type: 'int'},
                 {name: 'date', type: 'date'},
+                {name: 'group', type: 'int'},
                 {name: 'comment', type: 'string'},
                 {name: 'userid1', type: 'string'},
                 {name: 'userid2', type: 'string'},
@@ -447,8 +466,19 @@ TT.app = function() {
                 { fieldLabel: '赛事', xtype: 'combo', id: 'editsetcombo', name: 'siries_id_fake', allowBlank: false, editable: false, forceSelection: true,
                   triggerAction: 'all', mode: 'local', width: 500,
                   store: seriesTypes,
-                  displayField: 'siries_name', valueField: 'siries_id', hiddenName: 'siries_id'
-                },
+                  displayField: 'siries_name', valueField: 'siries_id', hiddenName: 'siries_id', listeners: {
+                      select: function(combo, record, index) {
+                          var groups_data = [];
+                          for ( var i = 1; i <= record.data.number_of_groups; i++ ) {
+                              groups_data.push([i, "第" + i + "组"]);
+                          }
+                          var edit_group = Ext.getCmp('edit_group');
+                          edit_group.getStore().loadData(groups_data);
+                          edit_group.setValue(1); // select the 1st group
+                      },
+                },},
+                { fieldLabel: '小组', xtype: 'combo', id: 'edit_group', name: 'group_fake', allowBlank: false, editable: false, forceSelection: true, autoSelect: true,
+                    triggerAction: 'all', mode: 'local', store: groups_store, displayField: 'show', valueField: 'number', hiddenName: 'group' },
                 { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
                 { layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [
                     { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
@@ -696,11 +726,7 @@ TT.app = function() {
             {header: '小组数', sortable: true, dataIndex: 'number_of_groups'},
             {header: '出线人数', sortable: true, dataIndex: 'group_outlets'},
             {header: '取前几名', sortable: true, dataIndex: 'top_n'},
-            {header: '阶段', width: 100, sortable: true, dataIndex: 'stage',
-                renderer: function(value) {
-                    var found = stageTypes.find(function(element) {return element[0] == value;});
-                    return found ? found[1] : value;
-            }},
+            {header: '阶段', width: 100, sortable: true, dataIndex: 'stage', renderer: renderStage},
             {header: '报名人数', sortable: true, dataIndex: 'enroll'},
             {header: '当前阶段人数', sortable: true, dataIndex: 'count'},
             {xtype: 'actioncolumn', header: '报名', items: [{icon: 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
@@ -802,6 +828,7 @@ TT.app = function() {
                 {name: 'siries_name'},
                 {name: 'date'},
                 {name: 'stage', type: 'int'},
+                {name: 'group_number', type: 'int'},
             ],
         });
         var myds = new Ext.data.GroupingStore({
@@ -815,6 +842,7 @@ TT.app = function() {
             reader: myReader,
             sortInfo: {field: 'date', direction: 'DESC'},
             groupField: 'siries_name',
+            groupDir: 'DESC',
         });
         var mycm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
@@ -831,6 +859,8 @@ TT.app = function() {
                 return record.get('point_after') - record.get('point_before');
             }},
             {header: '赛事', width: 400, sortable: true, dataIndex: 'siries_name'},
+            {header: '阶段', width: 80, sortable: true, dataIndex: 'stage', renderer: renderStage},
+            {header: '小组', width: 40, sortable: true, dataIndex: 'group_number'},
         ]);
 
         var toolbar = new Ext.Toolbar({
