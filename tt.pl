@@ -23,7 +23,7 @@ use constant {
     DEFAULT_POINT => 1600,
     STAGE_END => 100,
 };
-my $stage_name = { 0 => '报名', 1 => '循环赛', 2 => '淘汰赛', &STAGE_END() => '结束' };
+my $stage_name = { 0 => '报名', 1 => '循环赛', 2 => '淘汰赛', 3 => '自由赛', &STAGE_END() => '结束' };
 
 use settings;
 eval {
@@ -472,13 +472,18 @@ sub compare_users($users, $cross_detail) {
     }
 }
 
+sub getSeriesMatchGroups() {
+    my $siries_id = get_param('siries_id') || -1;
+    return { success=>0, msg=>"输入无效" } if $siries_id == -1;
+    my @groups = $db->exec('SELECT siries_id,stage,group_number FROM matches WHERE siries_id=? GROUP BY siries_id,stage,group_number ORDER BY stage ASC;', [$siries_id], 1, 0);
+    { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
+}
+
 sub getSeriesMatch() {
     my $siries_id = get_param('siries_id') || -1;
     return { success=>0, msg=>"输入无效" } if $siries_id == -1;
-    my $group_number = 1; #FIXME
-    my @stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
-    return { success=>0, msg=> $db->{errstr} } if $db->{err};
-    my $stage =  $stage[0]->{stage} // 1;
+    my $stage = get_param('stage') || 1;
+    my $group_number = get_param('group_number') || 1;
     my @userids = $db->exec('SELECT userid from SERIES_USERS WHERE siries_id=? AND stage=? AND group_number=?;', [$siries_id, $stage, $group_number], 1, 0);
     return { success=>0, msg=> $db->{errstr} } if $db->{err};
     my $data = getMatches($siries_id, $stage, $group_number);
@@ -583,7 +588,7 @@ sub editSeries() {
 
 sub getSeries() {
     my $siries_id = get_param('siries_id') || -1;
-    my $ongoing = get_param('ongoing', '');
+    my $ongoing = get_param('filter', '') eq 'ongoing' ? 1 : 0;
     my @series;
     my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links FROM SERIES';
     if ( $siries_id > 0 ) {
@@ -722,7 +727,8 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
-    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries editSeriesUser getSeriesMatch);
+    my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
+        editSeriesUser getSeriesMatch getSeriesMatchGroups);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode

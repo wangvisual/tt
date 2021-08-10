@@ -7,7 +7,7 @@ TT.app = function() {
     var perPage = 40;
     var tturl = './';
     var loginTypes = [ [0, '管理员'], [1, '普通用户'], [2, '非法用户'] ];
-    var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [100, '结束'] ];
+    var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [3, '自由赛'], [100, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
     var grid_default = {
         stripeRows: true,
@@ -731,11 +731,16 @@ TT.app = function() {
             {header: '当前阶段人数', sortable: true, dataIndex: 'count'},
             {xtype: 'actioncolumn', header: '报名', items: [{icon: 'etc/enroll.png', tooltip: '编辑系列赛参与人员', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
-                showPointList(record.get('siries_id'), record.get('siries_name'), record.get('stage'), record.get('number_of_groups'));
+                var stage = record.get('stage');
+                if ( stage >= 100 ) {
+                    Ext.Msg.alert('错误', '系列赛已经结束，不能报名');
+                } else {
+                    showPointList(record.get('siries_id'), record.get('siries_name'), record.get('stage'), record.get('number_of_groups'));
+                }
             }}]},
             {xtype: 'actioncolumn', header: '结果', items: [{icon: 'etc/cup.png', tooltip: '显示比赛结果', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
-                showSeriesMatch(record.get('siries_id'), record.get('siries_name'));
+                showSeriesMatchGroups(record.get('siries_id'), record.get('siries_name'));
             }}]},
             {header: '链接', width: 300, dataIndex: 'links',
                 renderer: function(value) {
@@ -967,18 +972,37 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
-    var showSeriesMatch = function(siries_id, siries_name) {
+    var showSeriesMatchGroups = function(siries_id, siries_name) {
         var myds = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
-            baseParams: {action: 'getSeriesMatch', siries_id: siries_id},
+            baseParams: {action: 'getSeriesMatchGroups', siries_id: siries_id},
+            autoDestroy: true,
+            autoLoad: true,
+            root: 'groups',
+            fields: ['siries_id', 'stage', 'group_number'],
+            listeners: {
+                load: function(store, records, options ) {
+                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number')) );
+                    listpanel.doLayout();
+                },
+            },
+        });
+    };
+    var showSeriesMatch = function(siries_id, siries_name, stage, group_number) {
+        var grid_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
+        listpanel.remove(grid_id);
+        var myds = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getSeriesMatch', siries_id: siries_id, stage: stage, group_number: group_number},
             autoDestroy: true,
         });
         var grid = new Ext.ux.DynamicGridPanel({
-            id: 'show_series_match_' + siries_id,
+            id: grid_id,
             ds: myds,
             rowNumberer: true,
-            title : siries_name + ' 结果',
+            title : siries_name + ' ' + renderStage(stage) + ' 第' + group_number + '组 结果',
             autoHeight: true,
             border: false,
             frame: true,
@@ -1008,9 +1032,7 @@ TT.app = function() {
             },
         });
 
-        listpanel.remove('show_series_match_' + siries_id);
         listpanel.add(grid);
-        listpanel.doLayout();
     };
 
     // public space
