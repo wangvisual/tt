@@ -16,6 +16,8 @@ use Data::Dumper;
 use Mail::Sendmail;
 use Scalar::Util;
 use JSON::XS;
+use Time::Piece;
+use Time::Seconds;
 use Net::LDAP;
 use List::Util qw(sum0);
 
@@ -152,7 +154,7 @@ sub getPointList() {
     return $fail if $db->{err};
     my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, sum(game_win) AS game_win, sum(game_lose) AS game_lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
     return $fail if $db->{err};
-    my $user = {}; # { weiw => { win => 0, fail => 1 } }
+    my $user = {}; # { id => { win => 0, fail => 1 } }
     foreach my $detail (@win) {
         foreach (qw(win lose game_win game_lose)) {
             $user->{$detail->{userid}}->{$_} = $detail->{$_};
@@ -591,11 +593,11 @@ sub getSeries() {
     my $ongoing = get_param('filter', '') eq 'ongoing' ? 1 : 0;
     my @series;
     my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links FROM SERIES';
-    if ( $siries_id > 0 ) {
+    if ( $siries_id > 0 ) { # 编辑系列赛
         @series = $db->exec("$base WHERE siries_id=?;", [$siries_id], 1);
-    } elsif ( $ongoing ) {
+    } elsif ( $ongoing ) { # 输入比赛结果时只显示正在进行的比赛
         @series = $db->exec("$base WHERE stage<?;", [STAGE_END], 1);
-    } else {
+    } else { # 显示系列赛
         @series = $db->exec("$base;", undef, 1);
         if ( !$db->{error} ) {
             my @count = $db->exec('SELECT siries_id, stage, count(*) AS enroll FROM SERIES_USERS GROUP BY siries_id, stage', undef, 1);
@@ -605,11 +607,12 @@ sub getSeries() {
                     $c{$_->{siries_id}}->{$_->{stage}} = $_->{enroll};
                 }
                 foreach ( @series ) {
-                    my $all = $c{$_->{siries_id}} // {};
-                    $_->{enroll} = $all->{0} // 0;
-                    $_->{count} = $all->{$_->{stage}} // 0;
+                    my $c = $c{$_->{siries_id}} // {};
+                    $_->{enroll} = $c->{0} // 0;
+                    $_->{count} = $c->{$_->{stage}} // 0;
                 }
             }
+            getSeriesDate(\@series);
         };
     }
     { success=>!$db->{error}, series=>\@series };
@@ -684,6 +687,146 @@ sub getUserList() {
     { success=>!$db->{error}, users=>\@val };
 }
 
+sub getRefPoint($points, $date) {
+    foreach my $d ( sort { $b cmp $a } keys $points->%* ) {
+        return $points->{$d} if $date gt $d;
+    }
+    return 0;
+}
+
+sub getSeriesDate($series) {
+    return if $db->{error};
+    my @dates = $db->exec('SELECT siries_id, stage, start FROM SERIES_DATE ORDER BY siries_id,stage DESC', undef, 1); # only stage DESC
+    return if $db->{error};
+    my (%d, %l);
+    foreach (@dates) {
+        $_->{start} ||= '';
+        $d{$_->{siries_id}}->{$_->{stage}}->{start} = $_->{start};
+        $d{$_->{siries_id}}->{$_->{stage}}->{end} = $l{$_->{siries_id}} // ( $_->{siries_id} == 1 ? '' :  $_->{start} );
+        $l{$_->{siries_id}} = $_->{start}; # record next stage start time, and at the end it will record 1st stage start
+    }
+    foreach my $s ( $series->@* ) {
+        my $d = $d{$s->{siries_id}} // {};
+        $s->{start} = $l{$s->{siries_id}} // '';
+        $s->{end} = $d->{&STAGE_END . ''}->{end} // '';
+        $s->{duration} = ( $s->{start} && $s->{end} ) ? (Time::Piece->strptime($s->{end}, '%Y-%m-%d') - Time::Piece->strptime($s->{start}, '%Y-%m-%d') + ONE_DAY)->days : '';
+        foreach my $stage ( sort keys $stage_name->%* ) {
+            next if !defined $d->{$stage}->{start} && !defined $d->{$stage}->{end};
+            $s->{date}->{$stage}->{start} = $d->{$stage}->{start} // '';
+            $s->{date}->{$stage}->{end} = $d->{$stage}->{end} // '';
+        }
+    }
+}
+
+sub replay() {
+    # USERS: point need to be re-calc
+    # SERIES: OK
+    # SERIES_USERS: replay original_point
+    # MATCHES: OK
+    # MATCH_DETAILS: replay using GAMES
+    # GAMES: OK
+    # SERIES_DATE: OK
+    $db->{dbh}->begin_work; # auto die when fail
+    my @users = $db->exec("SELECT * FROM USERS;", undef, 1);
+    my @series = $db->exec("SELECT * FROM SERIES ORDER BY siries_id;", undef, 1);
+    my @series_users = $db->exec("SELECT * FROM SERIES_USERS;", undef, 1);
+    my @matches = $db->exec("SELECT * FROM MATCHES ORDER BY match_id;", undef, 1);
+    my @match_details = $db->exec("SELECT * FROM MATCH_DETAILS ORDER BY match_id;", undef, 1);
+    my @games = $db->exec("SELECT * FROM GAMES ORDER BY game_id;", undef, 1);
+    my @series_date = $db->exec("SELECT * FROM SERIES_DATE;", undef, 1);
+    getSeriesDate(\@series);
+    $db->{dbh}->rollback();
+    $db->disconnect();
+
+    # get init point
+    my %points = (); # { id1 => 1600, ... } # init point
+    my %points_date = (); # { id1 => { 2020 => 1600, 2021 => 1700, ... }, ... }
+    my %points_ref = (); # { id1 => {series1 => { stage1 => 1600, ... }, ... }, ... }
+    my %points_latest = (); # { id1 => 1600, ... }
+    my %series_hash =  map {; $_->{siries_id} => $_ } @series;
+    foreach my $m(@match_details) {
+        $points{$m->{userid}} //= $m->{point_ref};
+    }
+    foreach my $u(@users) {
+        $points{$u->{userid}} //= $u->{point};
+        $points_date{$u->{userid}}->{'1900-00-00'} = $points{$u->{userid}};
+    }
+    %points_latest = %points;
+
+    # get ref point and calc point
+    my %match_hash = map {; $_->{match_id} => $_ } @matches; # { 145 => { match_id => 145, siries_id => 1, ... }, ... }
+    my @new_md = ();
+    foreach my $d (@match_details) {
+        next if $d->{win} == 0;
+        my ($match_id, $userid1, $win, $game_win, $game_lose, $userid2) = @{$d}{qw(match_id userid win game_win game_lose userid2)};
+        my $siries_id = $match_hash{$match_id}->{siries_id};
+        my $stage = $match_hash{$match_id}->{stage};
+        my $match_date = $match_hash{$match_id}->{date};
+        my $siries_date = $series_hash{$siries_id}->{date}->{$stage}->{start};
+        my ($ref1, $ref2);
+        my ($p1, $p2) = ($points_latest{$userid1}, $points_latest{$userid2});
+        $ref1 = getRefPoint($points_date{$userid1}, $siries_date);
+        $ref2 = getRefPoint($points_date{$userid2}, $siries_date);
+        if ( $siries_id != 1 ) {
+            $points_ref{$userid1}->{$siries_id}->{$stage} //= $ref1;
+            $points_ref{$userid2}->{$siries_id}->{$stage} //= $ref2;
+            $ref1 = $points_ref{$userid1}->{$siries_id}->{$stage};
+            $ref2 = $points_ref{$userid2}->{$siries_id}->{$stage};
+        }
+        my ($new1, $new2 ) = calcPoints(1, $p1, $p2, $ref1, $ref2);
+        $points_latest{$userid1} = $points_date{$userid1}->{$match_date} = $new1;
+        $points_latest{$userid2} = $points_date{$userid2}->{$match_date} = $new2;
+        push @new_md, [$match_id, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2];
+        push @new_md, [$match_id, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1];
+    }
+    #print "init:" . Dumper(\%points);
+    #print "date:" . Dumper(\%points_date);
+    #print "ref:" . Dumper(\%points_ref);
+    #print "latest:" . Dumper(\%points_latest);
+    #print "se" . Dumper(\@series);
+    #print "matchdetail:" . Dumper(\@new_md);
+    foreach my $s (@series_users) {
+        $s->{original_point} = $points_ref{$s->{userid}}->{$s->{siries_id}}->{$s->{stage}} // $s->{original_point};
+    }
+
+    my $new_db = db->new("test");
+    $new_db->{dbh}->begin_work;
+    foreach my $u(@users) { # $u: {userid => ..., }
+        $new_db->exec("INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,nick_name,cn_name,point) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(userid) DO NOTHING;",
+            [@{$u}{qw(userid name email employeeNumber logintype gender nick_name cn_name)}, $points_latest{$u->{userid}}], 0 );
+    }
+    foreach my $s (@series) {
+        $new_db->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,links,stage) VALUES(?,?,?,?,?,?,?) ON CONFLICT(siries_id) DO NOTHING;",
+            [@{$s}{qw(siries_id siries_name number_of_groups group_outlets top_n links stage)}], 0 );
+    }
+    foreach my $m (@matches) {
+        $new_db->exec("INSERT INTO MATCHES(match_id,siries_id,stage,group_number,date,comment) VALUES(?,?,?,?,?,?) ON CONFLICT(match_id) DO NOTHING;",
+            [@{$m}{qw(match_id siries_id stage group_number date comment)}], 0 );
+    }
+    foreach my $g (@games) {
+        $new_db->exec("INSERT INTO GAMES(game_id,match_id,game_number,userid,win,lose) VALUES(?,?,?,?,?,?) ON CONFLICT(game_id) DO NOTHING;",
+            [@{$g}{qw(game_id match_id game_number userid win lose)}], 0 );
+    }
+    foreach my $s (@series_users) {
+        $new_db->exec("INSERT OR IGNORE INTO SERIES_USERS(siries_id,stage,userid,original_point,group_number) VALUES(?,?,?,?,?);",
+            [@{$s}{qw(siries_id stage userid original_point group_number)}], 0 );
+    }
+    foreach my $d (@new_md) {
+        $new_db->exec("INSERT OR IGNORE INTO MATCH_DETAILS(match_id,userid,point_ref,point_before,point_after,win,lose,game_win,game_lose,userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+            $d, 0 );
+    }
+    foreach my $d (@series_date) {
+        $new_db->exec("INSERT OR IGNORE INTO SERIES_DATE(siries_id,stage,start) VALUES(?,?,?);",
+            [@{$d}{qw(siries_id stage start)}], 0 );
+    }
+    $new_db->{dbh}->commit();
+    foreach my $u(@users) {
+       if ( $u->{point} != $points_latest{$u->{userid}} ) {
+           print "Wrong: $u->{userid}, $u->{point} != $points_latest{$u->{userid}}\n";
+       }
+    }
+}
+
 sub printheader($q) {
     print $q->header( -charset=>'utf-8',
                       -expires=>'now',
@@ -728,7 +871,7 @@ sub main() {
     $db = db->new();
     my $action = $q->param('action') || '';
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
-        editSeriesUser getSeriesMatch getSeriesMatchGroups);
+        editSeriesUser getSeriesMatch getSeriesMatchGroups replay);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode

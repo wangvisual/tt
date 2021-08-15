@@ -11,12 +11,12 @@ use DBI;
 use DBD::SQLite;
 use Data::Dumper;
 
-sub new($proto) {
+sub new($proto, $dbname = undef) {
     my $class = ref($proto) || $proto;
     my $self = {};
     bless($self, $class);
 
-    my $dbname = $ENV{USER} // $ENV{SERVER_ADMIN} // 'unknown';
+    $dbname //= $ENV{USER} // $ENV{SERVER_ADMIN} // 'unknown';
     $dbname =~ s/\@.*//;
     my $dbfile = "$RealBin/db/$dbname.db";
     my $dbfile_exists = -e $dbfile;
@@ -54,7 +54,7 @@ sub init_db($self) {
     # 5, 1, 3, userb, 11, 5
     # 6, 1, 3, userb, 5, 11
     $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
-    # stage: 0 => enroll, 1 => 循环赛, 2 => 淘汰赛, 100 => end
+    # stage: 0 => enroll, 1 => 循环赛 ...
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES (siries_id INTEGER PRIMARY KEY ASC, siries_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
            . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0, links)");
     # When a siries changed from enroll to competition, or 循环赛=>淘汰赛, capture(update) the point snapshot into SERIES_USERS
@@ -62,7 +62,9 @@ sub init_db($self) {
     # 报名: 1, 0, usera, 1600, null
     # 循环赛: 1, 1, usera, 1600, 1
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 1, PRIMARY KEY (siries_id, stage, userid))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_DATE(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, start TEXT, PRIMARY KEY (siries_id, stage))");
     $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3], 0 );
+    $self->exec("INSERT INTO SERIES_DATE(siries_id, stage, start) VALUES(?,?,?);", [1, 3, '2019-08-01'], 0 );
     $dbh->do("PRAGMA user_version = 1");
 }
 
@@ -91,7 +93,8 @@ sub exec($self, $sql, $input, $needfetch, $transcation = 1) {
     $self->{errstr} = '';
     $self->{err} = 0;
     eval {
-        $self->{dbh}->begin_work if $transcation;
+        $transcation = 0 if !$self->{dbh}->{AutoCommit};
+        $self->{dbh}->begin_work if $transcation; # set AutoCommit to 0
         $sth = $self->{dbh}->prepare( $sql );
         die $DBI::errstr if !defined $sth;
         for (my $i = 0; $i <= scalar $input->@*; $i++ ) {

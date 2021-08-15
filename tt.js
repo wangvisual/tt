@@ -704,6 +704,9 @@ TT.app = function() {
             {name: 'stage', type: 'int'},
             {name: 'enroll', type: 'int'},
             {name: 'count', type: 'int'},
+            {name: 'start'},
+            {name: 'end'},
+            {name: 'duration'},
         ]);
         var myReader = new Ext.data.JsonReader({
             root:'series',
@@ -742,6 +745,9 @@ TT.app = function() {
                 var record = g.getStore().getAt(rowIndex);
                 showSeriesMatchGroups(record.get('siries_id'), record.get('siries_name'));
             }}]},
+            {header: '开始日期', sortable: true, dataIndex: 'start'},
+            {header: '结束日期', sortable: true, dataIndex: 'end'},
+            {header: '耗时', sortable: true, dataIndex: 'duration'},
             {header: '链接', width: 300, dataIndex: 'links',
                 renderer: function(value) {
                     if ( !value ) {
@@ -862,6 +868,12 @@ TT.app = function() {
             }},
             {header: '积分增减', width: 80, sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
                 return record.get('point_after') - record.get('point_before');
+            }},
+            {header: '选手1', width: 100, sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
+                return "(" + record.get('point_ref') + ") " + record.get('point_before') + " => " + record.get('point_after');
+            }},
+            {header: '选手2', width: 100, sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
+                return "(" + record.get('point_ref2') + ") " + record.get('point_before2') + " => " + record.get('point_after2');
             }},
             {header: '赛事', width: 400, sortable: true, dataIndex: 'siries_name'},
             {header: '阶段', width: 80, sortable: true, dataIndex: 'stage', renderer: renderStage},
