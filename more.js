@@ -28,8 +28,14 @@ more = `
         </br>
         <a target='_blank' href='https://www.meipian.cn/2csqliz8'>中篇</a>
         </br>
+        <a target='_blank' href='https://www.meipian.cn/2hc6fj7e'>下篇</a>
+        </br>
         <a target='_blank' href='https://www.meipian.cn/2dv1z5sn'>男单视频</a>
         <a target='_blank' href='https://www.meipian.cn/2dvcmclo'>女单视频</a>
+    </div>
+
+    <div>
+        <a target='_blank' href='https://www.meipian7.cn/3o5ydg0d'>2021年辞旧杯</a></br>
     </div>
 
 </div>
