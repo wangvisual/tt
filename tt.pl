@@ -733,16 +733,24 @@ sub replay() {
     # USERS: point need to be re-calc
     # SERIES: OK
     # SERIES_USERS: replay original_point
-    # MATCHES: OK
+    # MATCHES: match_id reorder
     # MATCH_DETAILS: replay using GAMES
     # GAMES: OK
     # SERIES_DATE: OK
     $db->{dbh}->begin_work; # auto die when fail
+    my @ids = $db->exec("SELECT match_details.match_id FROM match_details,matches WHERE matches.match_id=match_details.match_id AND win=1  ORDER BY date,match_details.match_id;", undef, 1);
+    my ($new_to_old, $old_to_new);
+    my $x = 1;
+    foreach my $i ( @ids) {
+        $old_to_new->{$i->{match_id}} = $x;   # 63 => 24
+        $new_to_old->{$x} = $i->{match_id}; # 24 => 63
+        $x++;
+    }
     my @users = $db->exec("SELECT * FROM USERS;", undef, 1);
     my @series = $db->exec("SELECT * FROM SERIES ORDER BY siries_id;", undef, 1);
     my @series_users = $db->exec("SELECT * FROM SERIES_USERS;", undef, 1);
     my @matches = $db->exec("SELECT * FROM MATCHES ORDER BY match_id;", undef, 1);
-    my @match_details = $db->exec("SELECT * FROM MATCH_DETAILS ORDER BY match_id;", undef, 1);
+    my @match_details = $db->exec("SELECT MATCH_DETAILS.* FROM MATCH_DETAILS,MATCHES WHERE MATCH_DETAILS.MATCH_ID=MATCHES.MATCH_ID ORDER BY date,match_id;", undef, 1);
     my @games = $db->exec("SELECT * FROM GAMES ORDER BY game_id;", undef, 1);
     my @series_date = $db->exec("SELECT * FROM SERIES_DATE;", undef, 1);
     getSeriesDate(\@series);
@@ -787,15 +795,21 @@ sub replay() {
         my ($new1, $new2 ) = calcPoints(1, $p1, $p2, $ref1, $ref2);
         $points_latest{$userid1} = $points_date{$userid1}->{$match_date} = $new1;
         $points_latest{$userid2} = $points_date{$userid2}->{$match_date} = $new2;
-        push @new_md, [$match_id, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2];
-        push @new_md, [$match_id, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1];
+        push @new_md, [$old_to_new->{$match_id}, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2];
+        push @new_md, [$old_to_new->{$match_id}, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1];
     }
+    my %new_match_hash = map {; $old_to_new->{$_->{match_id}} => $_ } @matches;
+    my @new_matches = ();
+    foreach my $id ( sort { $a <=> $b } keys %new_match_hash ) {
+        push @new_matches, $new_match_hash{$id};
+    }
+    my @new_games = sort { $old_to_new->{$a->{match_id}} <=> $old_to_new->{$b->{match_id}} || $a->{game_id} <=> $b->{game_id} } @games;
     #print "init:" . Dumper(\%points);
     #print "date:" . Dumper(\%points_date);
     #print "ref:" . Dumper(\%points_ref);
     #print "latest:" . Dumper(\%points_latest);
     #print "se" . Dumper(\@series);
-    #print "matchdetail:" . Dumper(\@new_md);
+    #print "matchdetail:" . Dumper(\@new_games);
     foreach my $s (@series_users) {
         $s->{original_point} = $points_ref{$s->{userid}}->{$s->{siries_id}}->{$s->{stage}} // $s->{original_point};
     }
@@ -810,13 +824,13 @@ sub replay() {
         $new_db->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,links,stage) VALUES(?,?,?,?,?,?,?) ON CONFLICT(siries_id) DO NOTHING;",
             [@{$s}{qw(siries_id siries_name number_of_groups group_outlets top_n links stage)}], 0 );
     }
-    foreach my $m (@matches) {
+    foreach my $m (@new_matches) {
         $new_db->exec("INSERT INTO MATCHES(match_id,siries_id,stage,group_number,date,comment) VALUES(?,?,?,?,?,?) ON CONFLICT(match_id) DO NOTHING;",
-            [@{$m}{qw(match_id siries_id stage group_number date comment)}], 0 );
+            [$old_to_new->{$m->{match_id}}, @{$m}{qw(siries_id stage group_number date comment)}], 0 );
     }
-    foreach my $g (@games) {
-        $new_db->exec("INSERT INTO GAMES(game_id,match_id,game_number,userid,win,lose) VALUES(?,?,?,?,?,?) ON CONFLICT(game_id) DO NOTHING;",
-            [@{$g}{qw(game_id match_id game_number userid win lose)}], 0 );
+    foreach my $g (@new_games) {
+        $new_db->exec("INSERT INTO GAMES(match_id,game_number,userid,win,lose) VALUES(?,?,?,?,?);",
+            [$old_to_new->{$g->{match_id}}, @{$g}{qw(game_number userid win lose)}], 0 );
     }
     foreach my $s (@series_users) {
         $new_db->exec("INSERT OR IGNORE INTO SERIES_USERS(siries_id,stage,userid,original_point,group_number) VALUES(?,?,?,?,?);",
