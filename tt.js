@@ -591,7 +591,47 @@ TT.app = function() {
             {header: '负局', width: 50, sortable: true, dataIndex: 'game_lose'},
             {header: '分数', width: 50, sortable: true, dataIndex: 'point'},
         ];
-        var selModel;
+        var selModel, scorePanel;
+        var scoreStore = new Ext.data.JsonStore({
+            url: tturl,
+            method: 'POST',
+            baseParams: {action: 'getPointHistory'},
+            autoLoad: false,
+            autoDestroy: true,
+            root: 'points',
+            id: 'userid',
+            fields: ['userid', "userid2", "name1", "name2", "point_before", "point_after", "date", 'siries_name', 'stage', 'group_number'],
+            listeners: {
+                load: function(store, records, options ) {
+                    var x = [];
+                    var y = [];
+                    records.forEach( function(record) {
+                        x.push(record.data.date);
+                        y.push([record.data.point_before, record.data.point_after, record.data.point_before, record.data.point_after, record.data]);
+                    });
+                    scorePanel.echarts.setOption({
+                        xAxis: { data: x },
+                        yAxis: { scale: true },
+                        series: [{
+                            type: 'k',
+                            data: y
+                        }]
+                    });
+                }
+            },
+        });
+        scorePanel = new Ext.ux.EchartsPanel({
+            height: 300,
+            option: {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function (params) {
+                        var r = params[0].data[5]; // original record data are in [5]
+                        return r.date + '<br/>' + r.siries_name + ' ' + renderStage(r.stage) + ' 第' + r.group_number + '组<br/>' + r.name1 + " vs. " + r.name2 + "<br/>" +  r.point_before + " => " + r.point_after;
+                    },
+                },
+            },
+        });
         if ( siries_id ) {
             selModel = new Ext.grid.CheckboxSelectionModel({ checkOnly : true });
             if ( !number_of_groups ) number_of_groups = 1;
@@ -606,6 +646,12 @@ TT.app = function() {
             mycmconfig.push(group_column);
         } else {
             selModel = new Ext.grid.RowSelectionModel();
+            selModel.on({ 'selectionchange': { fn: function(sm){
+                var current = sm.getSelections();
+                if ( current.length != 1 ) return;
+                var selectID = current[0].data.userid;
+                scoreStore.load({ params: {userid: selectID}});
+            }, scope: this, delay: 0 }});
         }
         var mycm = new Ext.grid.ColumnModel(mycmconfig);
 
@@ -689,6 +735,7 @@ TT.app = function() {
         } else {
             listpanel.removeAll(true);
             listpanel.add(grid);
+            listpanel.add(scorePanel);
             listpanel.doLayout();
         }
     };
@@ -747,7 +794,7 @@ TT.app = function() {
             }}]},
             {header: '开始日期', sortable: true, dataIndex: 'start'},
             {header: '结束日期', sortable: true, dataIndex: 'end'},
-            {header: '耗时', sortable: true, dataIndex: 'duration'},
+            {header: '耗时(天)', sortable: true, dataIndex: 'duration'},
             {header: '链接', width: 300, dataIndex: 'links',
                 renderer: function(value) {
                     if ( !value ) {

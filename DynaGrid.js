@@ -93,3 +93,35 @@ Ext.grid.RadioGroupColumn = Ext.extend(Ext.grid.Column, {
 
 Ext.grid.Column.types.radiogroupcolumn = Ext.grid.RadioGroupColumn;
 
+
+// https://segmentfault.com/a/1190000012944696
+// ExtJS 3.4 using flash to draw charts, so use more powerfull echarts
+Ext.ux.EchartsPanel = Ext.extend(Ext.Panel, {
+    //xtype: 'echartspanel',
+    cls: 'chart-body',
+    initComponent: function () {
+        var me = this;
+        if (!me.height || !me.option) return;
+        /*me.on("afterrender", function () {//afterrender后，获取到panel的dom元素，把echarts渲染上去。
+            me.initEcharts();
+        });*/
+        Ext.ux.EchartsPanel.superclass.initComponent.apply(this, arguments);
+        //同时绑定panel的resize事件，对charts图进行大小适配
+        me.on("resize", function (ta, width, height, ow, oh, e) {
+            me.initEcharts();
+            me.echarts.resize(width - 10, height - 5);
+        });
+    },
+    initEcharts: function() {
+        var me = this;
+        var div = me.getEl().dom;
+        if ( !me.echarts ) {
+            div.style.width = '90%';
+            div.style.height = me.height + "px";
+            me.echarts = echarts.init(me.getEl().dom);
+        }
+        if ( me.option ) me.echarts.setOption(me.option);
+    },
+
+});
+

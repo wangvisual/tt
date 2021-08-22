@@ -35,6 +35,7 @@ use db;
 
 my $imgd = 'etc';
 my $extjs = 'https://cdnjs.cloudflare.com/ajax/libs/extjs/3.4.1-1';
+my $echarts = 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.1.2';
 my $sprintf = 'https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.1.2';
 
 my $userid = '';
@@ -174,6 +175,16 @@ sub getPointList() {
         }
     }
     { success=>1, users=>\@users };
+}
+
+sub getPointHistory() {
+    my $id = get_param('userid') // '';
+    return { success=>0, points=>[] } if $id eq '';
+    my @points = $db->exec('SELECT match_details.*,matches.date,matches.stage,matches.group_number,series.siries_name,u1.cn_name AS name1,u2.cn_name AS name2 ' .
+        'FROM match_details,matches,series,users u1,users u2 WHERE match_details.match_id=matches.match_id AND matches.siries_id=series.siries_id ' .
+        'AND u1.userid=match_details.userid AND u2.userid=match_details.userid2 AND match_details.userid=? ORDER BY date,match_id;', [$id], 1);
+    return { success => 0, msg => '找不到历史分数' } if $db->{err} || scalar @points == 0;
+    { success=>1, points=>\@points };
 }
 
 # http://www.ctta.cn/xhgg/zcfg/2017/0621/149168.html
@@ -844,6 +855,7 @@ sub printheader($q) {
                          -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
                                    {-src=>"$sprintf/sprintf" . ( $settings::debug ? ".min" : "" ) . ".js"},
+                                   {-src=>"$echarts/echarts" . ( $settings::debug ? ".min" : "" ) . ".js"},
                                    {-code=>$js_settings},
                                    {-src=>'more.js'},
                                    {-src=>"DynaGrid.js"},
@@ -871,7 +883,7 @@ sub main() {
     $db = db->new();
     my $action = $q->param('action') || '';
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
-        editSeriesUser getSeriesMatch getSeriesMatchGroups replay);
+        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
