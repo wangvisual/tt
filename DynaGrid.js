@@ -102,9 +102,6 @@ Ext.ux.EchartsPanel = Ext.extend(Ext.Panel, {
     initComponent: function () {
         var me = this;
         if (!me.height || !me.option) return;
-        /*me.on("afterrender", function () {//afterrender后，获取到panel的dom元素，把echarts渲染上去。
-            me.initEcharts();
-        });*/
         Ext.ux.EchartsPanel.superclass.initComponent.apply(this, arguments);
         //同时绑定panel的resize事件，对charts图进行大小适配
         me.on("resize", function (ta, width, height, ow, oh, e) {
@@ -116,11 +113,16 @@ Ext.ux.EchartsPanel = Ext.extend(Ext.Panel, {
         var me = this;
         var div = me.getEl().dom;
         if ( !me.echarts ) {
-            div.style.width = '90%';
+            div.style.width = '99%';
             div.style.height = me.height + "px";
+            div.style.opacity = 1.0; // set in .css not work, don't know why
+            div.style.background =  '#F0F0E0';
             me.echarts = echarts.init(me.getEl().dom);
         }
         if ( me.option ) me.echarts.setOption(me.option);
+        me.echarts.getZr().on('click', function (params) {
+            me.hide();
+        });
     },
 
 });

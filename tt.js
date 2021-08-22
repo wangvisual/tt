@@ -603,12 +603,17 @@ TT.app = function() {
             fields: ['userid', "userid2", "name1", "name2", "point_before", "point_after", "date", 'siries_name', 'stage', 'group_number'],
             listeners: {
                 load: function(store, records, options ) {
+                    if ( !records.length ) {
+                        msgpanel.msg(store.reader.jsonData.msg);
+                        return scorePanel.hide();
+                    }
                     var x = [];
                     var y = [];
                     records.forEach( function(record) {
                         x.push(record.data.date);
                         y.push([record.data.point_before, record.data.point_after, record.data.point_before, record.data.point_after, record.data]);
                     });
+                    scorePanel.echarts.hideLoading();
                     scorePanel.echarts.setOption({
                         xAxis: { data: x },
                         yAxis: { scale: true },
@@ -622,6 +627,8 @@ TT.app = function() {
         });
         scorePanel = new Ext.ux.EchartsPanel({
             height: 300,
+            id: 'score_panel',
+            floating: true,
             option: {
                 tooltip: {
                     trigger: 'axis',
@@ -650,6 +657,10 @@ TT.app = function() {
                 var current = sm.getSelections();
                 if ( current.length != 1 ) return;
                 var selectID = current[0].data.userid;
+                var clentY = window.event.clientY;
+                scorePanel.show();
+                scorePanel.setPagePosition(0, clentY>=600 ? 100 : 700);
+                scorePanel.echarts.showLoading();
                 scoreStore.load({ params: {userid: selectID}});
             }, scope: this, delay: 0 }});
         }

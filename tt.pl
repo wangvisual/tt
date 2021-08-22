@@ -179,11 +179,11 @@ sub getPointList() {
 
 sub getPointHistory() {
     my $id = get_param('userid') // '';
-    return { success=>0, points=>[] } if $id eq '';
+    return { success=>0, points=>[], msg=> 'empty id' } if $id eq '';
     my @points = $db->exec('SELECT match_details.*,matches.date,matches.stage,matches.group_number,series.siries_name,u1.cn_name AS name1,u2.cn_name AS name2 ' .
         'FROM match_details,matches,series,users u1,users u2 WHERE match_details.match_id=matches.match_id AND matches.siries_id=series.siries_id ' .
         'AND u1.userid=match_details.userid AND u2.userid=match_details.userid2 AND match_details.userid=? ORDER BY date,match_id;', [$id], 1);
-    return { success => 0, msg => '找不到历史分数' } if $db->{err} || scalar @points == 0;
+    return { success => 0, msg => '找不到历史分数', points=>[] } if $db->{err} || scalar @points == 0;
     { success=>1, points=>\@points };
 }
 
