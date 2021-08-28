@@ -739,11 +739,10 @@ sub replay() {
     # SERIES_DATE: OK
     $db->{dbh}->begin_work; # auto die when fail
     my @ids = $db->exec("SELECT match_details.match_id FROM match_details,matches WHERE matches.match_id=match_details.match_id AND win=1  ORDER BY date,match_details.match_id;", undef, 1);
-    my ($new_to_old, $old_to_new);
+    my $old_to_new;
     my $x = 1;
     foreach my $i ( @ids) {
         $old_to_new->{$i->{match_id}} = $x;   # 63 => 24
-        $new_to_old->{$x} = $i->{match_id}; # 24 => 63
         $x++;
     }
     my @users = $db->exec("SELECT * FROM USERS;", undef, 1);

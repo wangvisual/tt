@@ -113,7 +113,7 @@ Ext.ux.EchartsPanel = Ext.extend(Ext.Panel, {
         var me = this;
         var div = me.getEl().dom;
         if ( !me.echarts ) {
-            div.style.width = '99%';
+            div.style.width = '90%';
             div.style.height = me.height + "px";
             div.style.opacity = 1.0; // set in .css not work, don't know why
             div.style.background =  '#F0F0E0';

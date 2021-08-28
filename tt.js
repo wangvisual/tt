@@ -615,6 +615,7 @@ TT.app = function() {
                     });
                     scorePanel.echarts.hideLoading();
                     scorePanel.echarts.setOption({
+                        title: { text: options.params.userid + ' 的历史分数', x: 'center' },
                         xAxis: { data: x },
                         yAxis: { scale: true },
                         series: [{
@@ -659,7 +660,7 @@ TT.app = function() {
                 var selectID = current[0].data.userid;
                 var clentY = window.event.clientY;
                 scorePanel.show();
-                scorePanel.setPagePosition(0, clentY>=600 ? 100 : 700);
+                scorePanel.setPagePosition(200, clentY>=600 ? 100 : 700);
                 scorePanel.echarts.showLoading();
                 scoreStore.load({ params: {userid: selectID}});
             }, scope: this, delay: 0 }});

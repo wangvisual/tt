@@ -56,7 +56,7 @@ span.avatar span {
 
 span.avatar:hover span {
     display:block;
-    position:absolute;
+    position:fixed;
     z-index:1000;
     top: 20%;
     margin-left:100px;
