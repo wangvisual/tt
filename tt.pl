@@ -489,6 +489,16 @@ sub getSeriesMatchGroups() {
     my $siries_id = get_param('siries_id') || -1;
     return { success=>0, msg=>"输入无效" } if $siries_id == -1;
     my @groups = $db->exec('SELECT siries_id,stage,group_number FROM matches WHERE siries_id=? GROUP BY siries_id,stage,group_number ORDER BY stage ASC;', [$siries_id], 1, 0);
+    return { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups } if $db->{error};
+    # add more from all 循环赛 which might no match yet
+    my %g = ();
+    foreach ( @groups ) {
+        $g{$_->{siries_id}}->{$_->{stage}}->{$_->{group_number}} = 1;
+    }
+    my @more = $db->exec('SELECT siries_id,stage,group_number FROM SERIES_USERS WHERE siries_id=? AND stage=? GROUP BY siries_id,stage,group_number ORDER BY stage ASC;', [$siries_id, 1], 1, 0);
+    foreach ( @more ) {
+        push @groups, $_ if !exists $g{$_->{siries_id}}->{$_->{stage}}->{$_->{group_number}};
+    }
     { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
 }
 
@@ -787,12 +797,17 @@ sub replay() {
 
     # get ref point and calc point
     my %match_hash = map {; $_->{match_id} => $_ } @matches; # { 145 => { match_id => 145, siries_id => 1, ... }, ... }
+    my %series_users_hash;
+    foreach ( @series_users ) {
+        $series_users_hash{$_->{siries_id}}->{$_->{stage}}->{$_->{group_number}}->{$_->{userid}} = $_->{original_point};
+    }
     my @new_md = ();
     foreach my $d (@match_details) {
         next if $d->{win} == 0;
         my ($match_id, $userid1, $win, $game_win, $game_lose, $userid2) = @{$d}{qw(match_id userid win game_win game_lose userid2)};
         my $siries_id = $match_hash{$match_id}->{siries_id};
         my $stage = $match_hash{$match_id}->{stage};
+        my $group_number = $match_hash{$match_id}->{group_number};
         my $match_date = $match_hash{$match_id}->{date};
         my $siries_date = $series_hash{$siries_id}->{"start_$stage"};
         my ($ref1, $ref2);
@@ -810,6 +825,8 @@ sub replay() {
         $points_latest{$userid2} = $points_date{$userid2}->{$match_date} = $new2;
         push @new_md, [$old_to_new->{$match_id}, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2];
         push @new_md, [$old_to_new->{$match_id}, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1];
+        push @series_users, { siries_id=> $siries_id, stage => $stage, userid => $userid1, group_number => $group_number } if !exists $series_users_hash{$siries_id}->{$stage}->{$group_number}->{$userid1};
+        push @series_users, { siries_id=> $siries_id, stage => $stage, userid => $userid2, group_number => $group_number } if !exists $series_users_hash{$siries_id}->{$stage}->{$group_number}->{$userid2};
     }
     my %new_match_hash = map {; $old_to_new->{$_->{match_id}} => $_ } @matches;
     my @new_matches = ();
