@@ -561,6 +561,11 @@ sub editSeries() {
     my $top_n = get_param('top_n') || 1;
     my $stage = get_param('stage') || 0;
     my $links = get_param('links', '');
+    my $date;
+    foreach my $s ( keys $stage_name->%* ) {
+        $date->{"start_$s"} = get_param("start_$s", '');
+        $date->{"end_$s"} = get_param("end_$s", ''); # NOTE: we don't need end time for end stage
+    }
 
     return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > STAGE_END;
 
@@ -577,6 +582,14 @@ sub editSeries() {
             $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage,links) VALUES(?,?,?,?,?,?);',
                       [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links], 2, 0);
             $siries_id = $db->{last_insert_id};
+        }
+        foreach my $s ( keys $stage_name->%* ) {
+            if ( $date->{"start_$s"} eq '' && $date->{"end_$s"} eq '' ) {
+                $db->exec('DELETE FROM SERIES_DATE WHERE siries_id=? AND stage=?', [$siries_id, $s], 0, 0);
+            } else {
+                $db->exec('INSERT INTO SERIES_DATE(siries_id,stage,start,end) VALUES(?,?,?,?) ON CONFLICT(siries_id,stage) DO UPDATE SET start=?,end=?;',
+                          [$siries_id, $s, $date->{"start_$s"},$date->{"end_$s"},$date->{"start_$s"},$date->{"end_$s"}], 1, 0);
+            }
         }
         if ( $need_capture ) {
             # Get all the users from last stage
@@ -606,6 +619,7 @@ sub getSeries() {
     my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links FROM SERIES';
     if ( $siries_id > 0 ) { # 编辑系列赛
         @series = $db->exec("$base WHERE siries_id=?;", [$siries_id], 1);
+        getSeriesDate(\@series);
     } elsif ( $ongoing ) { # 输入比赛结果时只显示正在进行的比赛
         @series = $db->exec("$base WHERE stage<?;", [STAGE_END], 1);
     } else { # 显示系列赛
@@ -648,7 +662,7 @@ sub editSeriesUser {
     my $stage = get_param('stage') // -1;
     return { success=>0, msg=>"系列赛ID不正确" } if $siries_id <= 0 || $stage < 0;;
     return { success=>0, msg=>"已经过了报名阶段" } if $stage > 0 && !isAdmin();
-    my $users = {map {; my @g = split(/,/, $_, 2); $g[0] => $g[1]  } get_multi_param('users', [])->@*}; # { userid => group_number }
+    my $users = {map {; my @g = split(/,/, $_, 2); $g[0] => $g[1] || 1  } get_multi_param('users', [])->@*}; # { userid => group_number }
     my $old_users = {map {; $_->{userid} =>  $_->{group_number}; } $db->exec('SELECT userid,group_number FROM SERIES_USERS WHERE siries_id=? AND stage=?', [$siries_id, $stage], 1)};
     my (@add_users, @delete_users, @changed_users);
     foreach ( keys $old_users->%* ) {
@@ -675,8 +689,8 @@ sub editSeriesUser {
         }
         my $basePoint = getBasePoint($siries_id, 'users');
         foreach ( @add_users ) {
-            $db->exec( "INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, group_number, userid, original_point) VALUES(?,?,?,?);",
-                [$siries_id, $stage, $_->{group}, $_->{id}, $basePoint->{$_} // DEFAULT_POINT ], 0, 0 );
+            $db->exec( "INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, group_number, userid, original_point) VALUES(?,?,?,?,?);",
+                [$siries_id, $stage, $_->{group}, $_->{id}, $basePoint->{$_->{id}} // DEFAULT_POINT ], 0, 0 );
         }
         foreach ( @changed_users ) {
             $db->exec( "UPDATE SERIES_USERS SET group_number=? WHERE siries_id=? AND stage=? AND userid=?;",
@@ -707,24 +721,24 @@ sub getRefPoint($points, $date) {
 
 sub getSeriesDate($series) {
     return if $db->{error};
-    my @dates = $db->exec('SELECT siries_id, stage, start FROM SERIES_DATE ORDER BY siries_id,stage DESC', undef, 1); # only stage DESC
+    my @dates = $db->exec('SELECT siries_id, stage, start, end FROM SERIES_DATE ORDER BY siries_id,stage DESC', undef, 1); # only stage DESC
     return if $db->{error};
     my (%d, %l);
     foreach (@dates) {
         $_->{start} ||= '';
         $d{$_->{siries_id}}->{$_->{stage}}->{start} = $_->{start};
-        $d{$_->{siries_id}}->{$_->{stage}}->{end} = $l{$_->{siries_id}} // ( $_->{siries_id} == 1 ? '' :  $_->{start} );
+        $d{$_->{siries_id}}->{$_->{stage}}->{end} = $_->{end};
         $l{$_->{siries_id}} = $_->{start}; # record next stage start time, and at the end it will record 1st stage start
     }
     foreach my $s ( $series->@* ) {
         my $d = $d{$s->{siries_id}} // {};
         $s->{start} = $l{$s->{siries_id}} // '';
-        $s->{end} = $d->{&STAGE_END . ''}->{end} // '';
+        $s->{end} = $d->{&STAGE_END . ''}->{start} // ''; # for end, only 'start' is needed
         $s->{duration} = ( $s->{start} && $s->{end} ) ? (Time::Piece->strptime($s->{end}, '%Y-%m-%d') - Time::Piece->strptime($s->{start}, '%Y-%m-%d') + ONE_DAY)->days : '';
         foreach my $stage ( sort keys $stage_name->%* ) {
             next if !defined $d->{$stage}->{start} && !defined $d->{$stage}->{end};
-            $s->{date}->{$stage}->{start} = $d->{$stage}->{start} // '';
-            $s->{date}->{$stage}->{end} = $d->{$stage}->{end} // '';
+            $s->{"start_$stage"} = $d->{$stage}->{start} // '';
+            $s->{"end_$stage"} = $d->{$stage}->{end} // '';
         }
     }
 }
@@ -780,7 +794,7 @@ sub replay() {
         my $siries_id = $match_hash{$match_id}->{siries_id};
         my $stage = $match_hash{$match_id}->{stage};
         my $match_date = $match_hash{$match_id}->{date};
-        my $siries_date = $series_hash{$siries_id}->{date}->{$stage}->{start};
+        my $siries_date = $series_hash{$siries_id}->{"start_$stage"};
         my ($ref1, $ref2);
         my ($p1, $p2) = ($points_latest{$userid1}, $points_latest{$userid2});
         $ref1 = getRefPoint($points_date{$userid1}, $siries_date);
@@ -803,12 +817,6 @@ sub replay() {
         push @new_matches, $new_match_hash{$id};
     }
     my @new_games = sort { $old_to_new->{$a->{match_id}} <=> $old_to_new->{$b->{match_id}} || $a->{game_id} <=> $b->{game_id} } @games;
-    #print "init:" . Dumper(\%points);
-    #print "date:" . Dumper(\%points_date);
-    #print "ref:" . Dumper(\%points_ref);
-    #print "latest:" . Dumper(\%points_latest);
-    #print "se" . Dumper(\@series);
-    #print "matchdetail:" . Dumper(\@new_games);
     foreach my $s (@series_users) {
         $s->{original_point} = $points_ref{$s->{userid}}->{$s->{siries_id}}->{$s->{stage}} // $s->{original_point};
     }
@@ -840,8 +848,8 @@ sub replay() {
             $d, 0 );
     }
     foreach my $d (@series_date) {
-        $new_db->exec("INSERT OR IGNORE INTO SERIES_DATE(siries_id,stage,start) VALUES(?,?,?);",
-            [@{$d}{qw(siries_id stage start)}], 0 );
+        $new_db->exec("INSERT OR IGNORE INTO SERIES_DATE(siries_id,stage,start,end) VALUES(?,?,?,?);",
+            [@{$d}{qw(siries_id stage start end)}], 0 );
     }
     $new_db->{dbh}->commit();
     foreach my $u(@users) {

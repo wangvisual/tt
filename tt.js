@@ -263,6 +263,31 @@ TT.app = function() {
             }
         }
 
+        var items = [
+            { fieldLabel: 'ID', xtype: 'hidden', name: 'siries_id', id: 'editsiriesid', allowBlank: false, readOnly: true },
+            { fieldLabel: '系列赛名字', width: 450, name: 'siries_name', allowBlank: false },
+            { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
+            { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
+            { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
+            { fieldLabel: '阶段', xtype: 'combo', id: 'editstagecombo', name: 'stagefake', allowBlank: false, editable: false, typeAhead: false,
+              triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
+              store: new Ext.data.SimpleStore({
+                     fields:['id', 'type']
+                    ,data:stageTypes}),
+              displayField: 'type', valueField: 'id', hiddenName: 'stage', value: 0,
+            },
+            { fieldLabel: '外部链接', width: 450, xtype: 'textarea', name: 'links', allowBlank: true },
+        ];
+        stageTypes.forEach( function(element) {
+            if ( element[0] != 100 ) {
+                items.push(
+                    {fieldLabel: element[1] + '开始', xtype: 'datefield', format: 'Y-m-d', name: 'start_' + element[0], allowBlank: true  },
+                    {fieldLabel: element[1] + '结束', xtype: 'datefield', format: 'Y-m-d', name: 'end_' + element[0], allowBlank: true  });
+            } else {
+                items.push( {fieldLabel: '比赛结束', xtype: 'datefield', format: 'Y-m-d', name: 'start_' + element[0], allowBlank: true  });
+            }
+        });
+
         var fp = new Ext.FormPanel({
             url: tturl,
             method: 'POST',
@@ -279,26 +304,21 @@ TT.app = function() {
                 {name: 'number_of_groups', type: 'int'},
                 {name: 'group_outlets', type: 'int'},
                 {name: 'top_n', type: 'int'},
-                {name: 'stage', type: 'int'}
+                {name: 'stage', type: 'int'},
+                {name: 'start_0', type: 'date'},
+                {name: 'end_0', type: 'date'},
+                {name: 'start_1', type: 'date'},
+                {name: 'end_1', type: 'date'},
+                {name: 'start_2', type: 'date'},
+                {name: 'end_2', type: 'date'},
+                {name: 'start_3', type: 'date'},
+                {name: 'end_3', type: 'date'},
+                {name: 'start_100', type: 'date'},
             ]),
             labelWidth: 70,
             labelAlign: 'right',
             defaultType: 'textfield',
-            items: [
-                { fieldLabel: 'ID', xtype: 'hidden', name: 'siries_id', id: 'editsiriesid', allowBlank: false, readOnly: true },
-                { fieldLabel: '系列赛名字', width: 450, name: 'siries_name', allowBlank: false },
-                { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
-                { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
-                { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
-                { fieldLabel: '阶段', xtype: 'combo', id: 'editstagecombo', name: 'stagefake', allowBlank: false, editable: false, typeAhead: false,
-                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
-                  store: new Ext.data.SimpleStore({
-                         fields:['id', 'type']
-                        ,data:stageTypes}),
-                  displayField: 'type', valueField: 'id', hiddenName: 'stage', value: 0,
-                },
-                { fieldLabel: '外部链接', width: 450, xtype: 'textarea', name: 'links', allowBlank: true },
-            ],
+            items: items,
             monitorValid: true,
             listeners: {
                 clientvalidation: editStageChange
@@ -738,6 +758,8 @@ TT.app = function() {
             var win = new Ext.Window({
                 title: "报名比赛 " + siries_name,
                 width: 800,
+                height: 1000,
+                autoScroll: true,
                 modal: true,
                 items: [fp]
             });

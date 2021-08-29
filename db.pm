@@ -62,7 +62,7 @@ sub init_db($self) {
     # 报名: 1, 0, usera, 1600, null
     # 循环赛: 1, 1, usera, 1600, 1
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 1, PRIMARY KEY (siries_id, stage, userid))");
-    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_DATE(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, start TEXT, PRIMARY KEY (siries_id, stage))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_DATE(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, start TEXT, end TEXT, PRIMARY KEY (siries_id, stage))");
     $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3], 0 );
     $self->exec("INSERT INTO SERIES_DATE(siries_id, stage, start) VALUES(?,?,?);", [1, 3, '2019-08-01'], 0 );
     $dbh->do("PRAGMA user_version = 1");
