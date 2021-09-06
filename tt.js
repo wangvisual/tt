@@ -459,6 +459,7 @@ TT.app = function() {
                 {name: 'siries_id', type: 'int'},
                 {name: 'date', type: 'date'},
                 {name: 'group', type: 'int'},
+                {name: 'waive', type: 'bool'},
                 {name: 'comment', type: 'string'},
                 {name: 'userid1', type: 'string'},
                 {name: 'userid2', type: 'string'},
@@ -534,7 +535,8 @@ TT.app = function() {
                     },
                 ]},
                 generateGames(),
-                { fieldLabel: 'comment', name: 'comment', allowBlank: true }
+                { fieldLabel: '负方弃权', name: 'waive', xtype: 'checkbox', allowBlank: true },
+                { fieldLabel: 'comment', name: 'comment', xtype: 'textfield', allowBlank: true },
             ],
             monitorValid: true,
             listeners: {
@@ -917,6 +919,7 @@ TT.app = function() {
                 {name: 'point_after2', type: 'int'},
                 {name: 'games'},
                 {name: 'comment'},
+                {name: 'waive', type: 'bool'},
                 {name: 'siries_name'},
                 {name: 'date'},
                 {name: 'stage', type: 'int'},
@@ -944,7 +947,8 @@ TT.app = function() {
                 return record.get('game_win') + ":" + record.get('game_lose');
             }},
             {header: '选手2', width: 200, sortable: true, dataIndex: 'full_name2'},
-            {header: '局分', width: 100, sortable: true, dataIndex: 'games', renderer: function(value) {
+            {header: '局分', width: 100, sortable: true, dataIndex: 'games', renderer: function(value, metaData, record) {
+                if ( record.get('waive') ) return '弃权';
                 return value.map( x => x.win + ":" + x.lose ).join(', ');
             }},
             {header: '积分增减', width: 80, sortable: true, renderer: function(value, metaData, record, rowIndex, colIndex, store) {
@@ -1106,12 +1110,12 @@ TT.app = function() {
                         return '';
                     }
                     if ( typeof(value.win) != 'undefined' ) {
-                        metadata.css = metadata.css + ( value.win ? " win" : " lose" );
+                        metadata.css = metadata.css + ( value.win ? " win" : ( value.waive ? " waive" : " lose" ) );
                         // http://developer.51cto.com/art/200907/133445.htm
                         // metadata.cellAttr is for the td, and will be masked for the div inside
                         // metadata.attr is for the div inside the td
                         // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
-                        metadata.attr = 'ext:qtip="' + value.game + '"';
+                        metadata.attr = 'ext:qtip="' + ( value.waive ? '弃权' :  value.game ) + '"';
                     }
                     return value.result;
                 },

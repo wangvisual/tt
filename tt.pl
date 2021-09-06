@@ -48,13 +48,15 @@ sub send_html_email($to, $cc, $subject, $msg) {
     my $from = $ENV{SERVER_ADMIN} // $ENV{USER} // 'unknown@test.com';
     $from = $from . '@test.com' if $from !~ /@/; # send may fail but won't warning
     my %mail = (
-        From             => encode("MIME-Header", $settings::title) . "<$from>",
-        To               => $to,
-        Cc               => $cc,
-        Subject          => encode("MIME-Header", $subject),
-        Message          => encode('utf8', $msg),
-        'content-type'   => 'text/html; charset="utf-8"',
-        'Auto-Submitted' => 'auto-generated', # https://tools.ietf.org/html/rfc3834
+        From                       => encode("MIME-Header", $settings::title) . "<$from>",
+        To                         => $to,
+        Cc                         => $cc,
+        Subject                    => encode("MIME-Header", $subject),
+        Message                    => encode('utf8', $msg),
+        'content-type'             => 'text/html; charset="utf-8"',
+        'Auto-Submitted'           => 'auto-generated', # https://tools.ietf.org/html/rfc3834
+        'X-Auto-Response-Suppress' => "All",
+        'reply-to'                 => "$to,$cc",
     );
     sendmail(%mail) or print STDERR "Sendmail: $Mail::Sendmail::error\n";
 }
@@ -245,6 +247,8 @@ sub editMatch() {
     return { success => 0, msg => '分不出胜负' } if $win1 == $win2;
 
     my $comment = get_param('comment', '');
+    my $waive = get_param('waive', 'off');
+    $waive = ( $waive eq 'on' ) ? 1 : 0;
 
     # get the old point and calc the new point
     my @points = $db->exec('SELECT userid, point, email, name || ", " || cn_name || ", " || nick_name as full_name FROM USERS WHERE userid IN (?,?);', [$userid1, $userid2], 1);
@@ -266,6 +270,14 @@ sub editMatch() {
     my ($diff1, $diff2) = ($new_point1 - $point1, $new_point2 - $point2);
     my $win = $win1 - $win2 > 0 ? 1 : 0;
     my $lose = 1 - $win;
+    my ( $waive1, $waive2 ) = ('', '');
+    if ( $waive ) {
+        if ( $win ) {
+            $waive2 = "(弃权)";
+        } else {
+            $waive1 = "(弃权)";
+        }
+    }
 
     # update DB using transcation
     eval {
@@ -273,10 +285,10 @@ sub editMatch() {
         $db->exec("INSERT INTO MATCHES(siries_id, stage, group_number, date, comment) VALUES(?,?,?,?,?);", [$siries_id, $stage, $group_number, $date, $comment], 2, 0);
         $match_id = $db->{last_insert_id};
         die "Invalid siries_id\n" if $match_id <= 0;
-        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
-                  [$match_id, $userid1, $ref1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2], 0, 0);
-        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
-                  [$match_id, $userid2, $ref2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1], 0, 0);
+        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2, waive) VALUES(?,?,?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid1, $ref1, $point1, $new_point1, $win, $lose, $win1, $win2, $userid2, $waive], 0, 0);
+        $db->exec("INSERT INTO MATCH_DETAILS(match_id, userid, point_ref, point_before, point_after, win, lose, game_win, game_lose, userid2, waive) VALUES(?,?,?,?,?,?,?,?,?,?,?);",
+                  [$match_id, $userid2, $ref2, $point2, $new_point2, $lose, $win, $win2, $win1, $userid1, $waive], 0, 0);
         foreach (my $number = 0;  $number < scalar @games; $number++ ) {
             $db->exec("INSERT INTO GAMES(match_id, game_number, userid, win, lose) VALUES(?,?,?,?,?);",
                       [$match_id, $number, $userid1, $games[$number]->[0], $games[$number]->[1]], 0, 0);
@@ -333,8 +345,8 @@ sub editMatch() {
     <p>
         <table>
             <tr><th>参赛人员</th><th>比分</th><th>参考积分</th><th>原积分</th><th>新积分</th><th>积分变动</th></tr>
-            <tr><td>$names{$userid1}</td><td>$win1</td><td>$ref1</td><td>$point1</td><td>$new_point1</td><td>$diff1</td></tr>
-            <tr><td>$names{$userid2}</td><td>$win2</td><td>$ref2</td><td>$point2</td><td>$new_point2</td><td>$diff2</td></tr>
+            <tr><td>$names{$userid1}</td><td>$win1$waive1</td><td>$ref1</td><td>$point1</td><td>$new_point1</td><td>$diff1</td></tr>
+            <tr><td>$names{$userid2}</td><td>$win2$waive2</td><td>$ref2</td><td>$point2</td><td>$new_point2</td><td>$diff2</td></tr>
         </table>
     </p>
     <p></p>
@@ -384,7 +396,7 @@ sub getMatches($siries_id = undef, $stage = undef, $group_number = undef) {
         push @inputs, $group_number;
     }
     my $filter = join(' ', map{; "AND m.$_=?"} @filters); # "AND m.siries_id=? AND m.stage=? AND m.group_number=?"
-    my $sql = 'SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, ' .
+    my $sql = 'SELECT m.match_id, m.stage, m.group_number, m.date, m.comment, d.point_ref, d.point_before, d.point_after, d.waive, ' .
               'd.userid, d.win, d.lose, d.game_win, d.game_lose, u.userid, u.name || ", " || u.cn_name || ", " || u.nick_name as full_name, s.siries_name ' .
               'FROM MATCHES AS m, MATCH_DETAILS AS d, SERIES AS s, USERS AS u ' .
               "WHERE m.match_id=d.match_id AND m.siries_id=s.siries_id AND d.userid=u.userid $filter;";
@@ -450,12 +462,13 @@ sub set_compare_result($levels, $cross_detail) {
 sub compare_users($users, $cross_detail) {
     my (%scores, %compare_games, %compare_points);
     while (my ($user1, $crosses) = each( $cross_detail->%* )) {
+        #$crosses userid2 => { win => 1, game_win => $m->{game_win}, game_lose => $m->{game_lose}, point_win => $point_win, point_lose => $point_lose, waive => $waive };
         next unless $user1 ~~ $users;
         while (my ($user2, $cross) = each( $crosses->%* )) {
             next if !defined $cross->{win} || $cross->{win} == 0; # only check win half
             next unless $user2 ~~ $users;
             $scores{$user1} += 2;
-            $scores{$user2} += 1;
+            $scores{$user2} += ( $cross->{waive} ? 0 : 1 );
             $compare_games{$user1}->{win} += $cross->{game_win};
             $compare_games{$user1}->{lose} += $cross->{game_lose};
             $compare_games{$user2}->{lose} += $cross->{game_win};
@@ -518,7 +531,7 @@ sub getSeriesMatch() {
         $name{$_->{userid}} = $_->{cn_name};
     }
     # change to 2 dimension table
-    my $matches = $data->{matches}; # [ { userid, userid2, win, lose, games => [win, lose, game_number, game_id, userid] }, ... ]
+    my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
     my %cross; # { userid1 => { userid2 => { 'result' => '0:2', 'win' => 0, 'game' => '2019-08-21, 13:15, 7:11', 'match_id' => 26 }, userid3 => {} }, ... }
     my %cross_detail; # { userid1 => { userid2 => { sorting: undef, win: 1, game_win: 0, game_lose: 2, point_win: 23, point_lose: 33}, ...}, ... }
     my %score_detail; #
@@ -528,12 +541,12 @@ sub getSeriesMatch() {
         my $game2 = "$m->{date}, " . join(', ', map {; "$_->{lose}:$_->{win}" } @games);
         my $point_win = sum0( map {; $_->{win} } $m->{games}->@* );
         my $point_lose = sum0( map {; $_->{lose} } $m->{games}->@* );
-        $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id}, game => $game };
-        $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id}, game => $game2 };
-        $cross_detail{$m->{userid}}->{$m->{userid2}} = { win => 1, game_win => $m->{game_win}, game_lose => $m->{game_lose}, point_win => $point_win, point_lose => $point_lose };
-        $cross_detail{$m->{userid2}}->{$m->{userid}} = { win => 0, game_lose => $m->{game_win}, game_win => $m->{game_lose}, point_win => $point_lose, point_lose => $point_win };
+        $cross{$m->{userid}}->{$m->{userid2}} = { win => 1, result => "$m->{game_win}:$m->{game_lose}", match_id => $m->{match_id}, waive => $m->{waive}, game => $game };
+        $cross{$m->{userid2}}->{$m->{userid}} = { win => 0, result => "$m->{game_lose}:$m->{game_win}", match_id => $m->{match_id}, waive => $m->{waive}, game => $game2 };
+        $cross_detail{$m->{userid}}->{$m->{userid2}} = { win => 1, game_win => $m->{game_win}, game_lose => $m->{game_lose}, point_win => $point_win, point_lose => $point_lose, waive => $m->{waive} };
+        $cross_detail{$m->{userid2}}->{$m->{userid}} = { win => 0, game_lose => $m->{game_win}, game_win => $m->{game_lose}, point_win => $point_lose, point_lose => $point_win, waive => $m->{waive} };
         $score_detail{$m->{userid}}->{value} += 2;
-        $score_detail{$m->{userid2}}->{value} += 1;
+        $score_detail{$m->{userid2}}->{value} += ( $m->{waive} ? 0 : 1 );
         $score_detail{$m->{userid}}->{win} += 1;
         $score_detail{$m->{userid2}}->{lose} += 1;
         $score_detail{$m->{userid}}->{total} += 1;
@@ -804,7 +817,7 @@ sub replay() {
     my @new_md = ();
     foreach my $d (@match_details) {
         next if $d->{win} == 0;
-        my ($match_id, $userid1, $win, $game_win, $game_lose, $userid2) = @{$d}{qw(match_id userid win game_win game_lose userid2)};
+        my ($match_id, $userid1, $win, $game_win, $game_lose, $userid2, $waive) = @{$d}{qw(match_id userid win game_win game_lose userid2 waive)};
         my $siries_id = $match_hash{$match_id}->{siries_id};
         my $stage = $match_hash{$match_id}->{stage};
         my $group_number = $match_hash{$match_id}->{group_number};
@@ -823,8 +836,8 @@ sub replay() {
         my ($new1, $new2 ) = calcPoints(1, $p1, $p2, $ref1, $ref2);
         $points_latest{$userid1} = $points_date{$userid1}->{$match_date} = $new1;
         $points_latest{$userid2} = $points_date{$userid2}->{$match_date} = $new2;
-        push @new_md, [$old_to_new->{$match_id}, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2];
-        push @new_md, [$old_to_new->{$match_id}, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1];
+        push @new_md, [$old_to_new->{$match_id}, $userid1, $ref1, $p1, $new1, $win, 1-$win, $game_win, $game_lose, $userid2, $waive];
+        push @new_md, [$old_to_new->{$match_id}, $userid2, $ref2, $p2, $new2, 1-$win, $win, $game_lose, $game_win, $userid1, $waive];
         push @series_users, { siries_id=> $siries_id, stage => $stage, userid => $userid1, group_number => $group_number } if !exists $series_users_hash{$siries_id}->{$stage}->{$group_number}->{$userid1};
         push @series_users, { siries_id=> $siries_id, stage => $stage, userid => $userid2, group_number => $group_number } if !exists $series_users_hash{$siries_id}->{$stage}->{$group_number}->{$userid2};
     }
@@ -861,7 +874,7 @@ sub replay() {
             [@{$s}{qw(siries_id stage userid original_point group_number)}], 0 );
     }
     foreach my $d (@new_md) {
-        $new_db->exec("INSERT OR IGNORE INTO MATCH_DETAILS(match_id,userid,point_ref,point_before,point_after,win,lose,game_win,game_lose,userid2) VALUES(?,?,?,?,?,?,?,?,?,?);",
+        $new_db->exec("INSERT OR IGNORE INTO MATCH_DETAILS(match_id,userid,point_ref,point_before,point_after,win,lose,game_win,game_lose,userid2,waive) VALUES(?,?,?,?,?,?,?,?,?,?,?);",
             $d, 0 );
     }
     foreach my $d (@series_date) {

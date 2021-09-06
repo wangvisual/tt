@@ -6,6 +6,10 @@ td.lose {
     color: green;
 }
 
+td.waive {
+    color: grey;
+}
+
 td.diagonalFalling {
     /* https://stackoverflow.com/questions/30376886/is-it-possible-to-cross-out-cells-in-an-html-table/30377346#30377346 */
     background-image: linear-gradient(to top right, transparent calc(50% - 1px), black, transparent calc(50% + 1px));
