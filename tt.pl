@@ -551,6 +551,7 @@ sub getSeriesMatch() {
         $score_detail{$m->{userid2}}->{lose} += 1;
         $score_detail{$m->{userid}}->{total} += 1;
         $score_detail{$m->{userid2}}->{total} += 1;
+        $score_detail{$m->{userid2}}->{waive} += 1 if $m->{waive};
         push @userids, { userid => $m->{userid} };
         push @userids, { userid => $m->{userid2} };
     }

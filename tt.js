@@ -1123,7 +1123,7 @@ TT.app = function() {
                     if ( !value || typeof(value) != 'object' ) {
                         value = { value: 0 };
                     }
-                    metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 共:' + (value.total || 0) + '"';
+                    metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 弃权:' + (value.waive || 0) + ', 共:' + (value.total || 0) + '"';
                     return value.value;
                 },
             },
