@@ -2,8 +2,7 @@
 more = `
 <div id='more'>
     <div>积分:</br>
-        <a target='_blank' href='http://cntt.sports.cn/sshg/2014hyls/tzgg/2014-08-03/2349855.html'>介绍</a>
-        <a target='_blank' href='http://xhimg.sports.cn/Image/soft/170621/10-1F621100540936.doc'>计算方法</a>
+        <a target='_blank' href='tt.docx'>竞赛积分管理办法（试行）</a>
     </div>
 
     <div>横拍教学:</br>
