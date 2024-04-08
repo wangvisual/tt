@@ -13,6 +13,8 @@ $settings::name = 'displayName';
 $settings::email = 'mail';
 $settings::employeeNumber = 'employeeNumber';
 $settings::baseDN = 'ou=people'; # Change this to the real baseDN
+$settings::bindDN = ''; # Change this to the real bindDN
+$settings::bindPassword = ''; # Change this to the real bindPassword
 $settings::avatar_template = ''; # change this to url of the avatar
 
 $settings::servername = ""; # Change this to the web server host name

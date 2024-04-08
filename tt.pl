@@ -72,7 +72,11 @@ sub getUserInfo($uid = undef) {
     # Try LDAP if not found in db
     my ($ldap, $mesg, $email, $name, $employeeNumber);
     $ldap = Net::LDAP->new( $settings::ldapserver ) or do { print "$@"; return $fail; };
-    $mesg = $ldap->bind; # an anonymous bind
+    if ( $settings::bindDN && $settings::bindPassword ) {
+        $mesg = $ldap->bind($settings::bindDN, password => $settings::bindPassword);
+    } else {
+        $mesg = $ldap->bind;
+    }
     $mesg = $ldap->search(
                            base   => $settings::baseDN,
                            filter => "(uid=" . $uid .")",
