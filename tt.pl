@@ -128,16 +128,18 @@ sub editUser() {
     my $gender = get_param('gender', 'Male');
     my $point = get_param('point') || 0;
 
+    my $userInfo = getUserInfo($id);
+    my $success = $userInfo->{success};
+    my $old_point = $userInfo->{user}[0]{point} || 0;
+
     my $admin = isAdmin($userid);
     # check permissions, only admin can set another as admin/change point directly
     if ( !$admin ) {
         return { success=>0, msg=>"Permission denied, Can't change ${id}'s value" } if $id ne $userid;
         return { success=>0, msg=>"Permission denied, Can't set $id as admin" } if $logintype == 0;
-        return { success=>0, msg=>"Permission denied, Can't set ${id}'s point" } if $point > 0;
+        return { success=>0, msg=>"Permission denied, Can't set ${id}'s point" } if $point > 0 && $point != $old_point;
     }
 
-    my $userInfo = getUserInfo($id);
-    my $success = $userInfo->{success};
     if ( $success ) {
         $db->exec("INSERT INTO USERS(userid,name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?) ON CONFLICT(userid) DO NOTHING;",
             [$id, @{$userInfo->{user}[0]}{qw(name email employeeNumber logintype gender point)}], 0 ) if !$userInfo->{db};
