@@ -700,7 +700,7 @@ sub editSeriesUser {
     foreach ( keys $old_users->%* ) {
         push @delete_users, $_ if !exists $users->{$_};
     }
-    return { success => 0, msg => "为了防止误操作，每次最多删除两个报名人员" } if scalar @delete_users > 2;
+    return { success => 0, msg => "为了防止误操作，报名阶段每次最多删除两个报名人员" } if $stage <= 1 && scalar @delete_users > 2;
     foreach ( keys $users->%* ) {
         if ( !exists $old_users->{$_} ) {
             push @add_users, { id => $_, group => $users->{$_} };
