@@ -623,12 +623,14 @@ sub editSeries() {
         }
         if ( $need_capture ) {
             # Get all the users from last stage
-            my @users = $db->exec("SELECT userid FROM SERIES_USERS WHERE siries_id=? AND stage=?;", [$siries_id, $stage -1], 1, 0);
+            my @users = $db->exec("SELECT userid, group_number FROM SERIES_USERS WHERE siries_id=? AND stage=?;", [$siries_id, $stage -1], 1, 0);
             my $point = getBasePoint($siries_id, 'users'); # 进入下一阶段，分数以USERS表格中的最新值为新的基准
-            foreach my $uid ( map{; $_->{userid}; } @users ) {
+            foreach my $user ( @users ) {
+                my $uid = $user->{userid};
+                my $group_number = $stage <= 1 ? $user->{group_number} : 1; # 循环赛阶段的组号不变，其它阶段都是1
                 # 如果这一阶段已经有了分数，那么就不跟新了，这是为了处理'返回报名又重新比赛'
                 $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id, stage, userid, original_point, group_number) VALUES(?,?,?,?,?)',
-                          [$siries_id, $stage, $uid, $point->{$uid} // 0, 1], 0, 0);
+                          [$siries_id, $stage, $uid, $point->{$uid} // 0, $group_number], 0, 0);
             }
         }
         $db->{dbh}->commit();
