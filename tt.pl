@@ -159,7 +159,7 @@ sub getPointList() {
     my $siries_id = get_param('siries_id') || 0;
     my $stage = get_param('stage') || 0;
     my $fail = { success=>0, users => [] };
-    my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point FROM USERS WHERE logintype<=? ORDER BY userid ASC;', [1], 1);
+    my @users = $db->exec('SELECT userid,name,nick_name,employeeNumber,cn_name,gender,point,email FROM USERS WHERE logintype<=? ORDER BY userid ASC;', [1], 1);
     return $fail if $db->{err};
     my @win = $db->exec('SELECT sum(win) AS win, sum(lose) AS lose, sum(game_win) AS game_win, sum(game_lose) AS game_lose, userid FROM MATCH_DETAILS GROUP BY userid;', undef, 1);
     return $fail if $db->{err};

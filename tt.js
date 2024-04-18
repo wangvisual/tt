@@ -754,6 +754,14 @@ TT.app = function() {
                 },{
                     text: 'Reload', xtype: 'button', type: 'reset',
                     handler: function() { myds.reload(); },
+                },{
+                    text: 'Email', xtype: 'button', type: 'submit',
+                    handler: function(){
+                        var current = grid.getSelectionModel().getSelections();
+                        var emails = current.map( x => '"' + x.data.name + '"<' + x.data.email + '>' ).join(',');
+                        emails += '?subject=' + siries_name;
+                        window.open('mailto:' + emails);
+                    }
                 }]
             });
 
