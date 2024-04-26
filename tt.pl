@@ -87,6 +87,7 @@ sub getUserInfo($uid = undef) {
 
     foreach my $entry ($mesg->entries) {
         $name = ($entry->get_value($settings::name))[0] || ($entry->get_value('cn'))[0] || $uid;
+        $name =~ s/\s*\(External\)//i; # remove (External) from name
         $email = ($entry->get_value($settings::email))[0] || '';
         $employeeNumber = ($entry->get_value($settings::employeeNumber))[0] || '';
     }
