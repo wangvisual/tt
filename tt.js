@@ -6,7 +6,7 @@ TT.app = function() {
     // const
     var perPage = 40;
     var tturl = './';
-    var loginTypes = [ [0, '管理员'], [1, '普通用户'], [2, '非法用户'] ];
+    var loginTypes = [ [0, '管理员'], [1, '普通用户'], [2, '停用用户'] ];
     var stageTypes = [ [0, '报名'], [1, '循环赛'], [2, '淘汰赛'], [3, '自由赛'], [100, '结束'] ];
     var genderTypes = [ ['未知', '未知'], ['男', '男'], ['女', '女'] ];
     var grid_default = {
@@ -240,6 +240,23 @@ TT.app = function() {
         win.show();
         reloadUserPanel(fp);
         win.doLayout();
+    };
+
+    // check if all users are still active/inactive and update the user list
+    var checkAllUsers = function() {
+        Ext.Ajax.request({
+            url: tturl,
+            method: 'POST',
+            success: function ( result, request) {
+                var jsonData = Ext.util.JSON.decode(result.responseText);
+                results(0, {result: jsonData});
+                if ( jsonData.success ) {
+                    showUsers();
+                }
+            },
+            failure: function () { results(0, {result: {success: 0, msg: ''}}); },
+            params: { action: 'checkAllUsers' }
+        });
     };
 
     var editSeries = function(siries_id) {
@@ -1051,9 +1068,18 @@ TT.app = function() {
                     handler: function(){ editUserInfo(); }
                 },
                 '-',
+                {
+                    text:"检查人员",
+                    id:'checkUser',
+                    handler: function(){ checkAllUsers(); }
+                },
+                '-',
             ]
         });
-        if ( logintype != 0 ) Ext.getCmp('newUser').disable();
+        if ( logintype != 0 ) {
+            Ext.getCmp('newUser').disable();
+            Ext.getCmp('checkUser').disable();
+        }
         var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
             ds: myds,
             cm: mycm,

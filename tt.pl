@@ -24,6 +24,9 @@ use List::Util qw(sum0);
 use constant {
     DEFAULT_POINT => 1600,
     STAGE_END => 100,
+    ADMIN_ACCOUNT => 0,
+    NORMAL_ACCOUNT => 1,
+    DISABLED_ACCOUNT => 2,
 };
 my $stage_name = { 0 => '报名', 1 => '循环赛', 2 => '淘汰赛', 3 => '自由赛', &STAGE_END() => '结束' };
 
@@ -61,7 +64,7 @@ sub send_html_email($to, $cc, $subject, $msg) {
     sendmail(%mail) or print STDERR "Sendmail: $Mail::Sendmail::error\n";
 }
 sub getUserInfo($uid = undef) {
-    $uid //= $q->param('userid');
+    $uid //= lc($q->param('userid', ''));
     my $fail = {success=>0, user=>[{}]};
 
     # In DB?
@@ -93,7 +96,7 @@ sub getUserInfo($uid = undef) {
     }
     $mesg = $ldap->unbind;
 
-    { success=>1, db=>0, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => 1, gender=> '未知', point => 0}] };
+    { success=>1, db=>0, user=>[{userid=>$uid, name => $name, email => $email, employeeNumber => $employeeNumber, logintype => NORMAL_ACCOUNT, gender=> '未知', point => 0}] };
 }
 
 sub getGeneralInfo() {
@@ -115,17 +118,17 @@ sub isAdmin($id=$userid) {
     return 0 if $db->{err} || scalar @val == 0;
     return !$val[0]->{logintype} if scalar @val != 0;
     # or there's no admin yet
-    my @anyone = $db->exec('SELECT count(logintype) AS c FROM USERS WHERE logintype=?;', [0], 1);
+    my @anyone = $db->exec('SELECT count(logintype) AS c FROM USERS WHERE logintype=?;', [ADMIN_ACCOUNT], 1);
     return 0 if $db->{err} || scalar @anyone == 0;
     !$anyone[0]->{c};
 }
 
 sub editUser() {
-    my $id = get_param('userid');
+    my $id = lc(get_param('userid')//'');
     return { success=>0, msg=>'Invalid input' } if !$id;
     my $nick_name = get_param('nick_name', '');
     my $cn_name = get_param('cn_name', '');
-    my $logintype = get_param('logintype', 1); # normal
+    my $logintype = get_param('logintype', NORMAL_ACCOUNT);
     my $gender = get_param('gender', 'Male');
     my $point = get_param('point') || 0;
 
@@ -137,7 +140,7 @@ sub editUser() {
     # check permissions, only admin can set another as admin/change point directly
     if ( !$admin ) {
         return { success=>0, msg=>"Permission denied, Can't change ${id}'s value" } if $id ne $userid;
-        return { success=>0, msg=>"Permission denied, Can't set $id as admin" } if $logintype == 0;
+        return { success=>0, msg=>"Permission denied, Can't set $id as admin" } if $logintype == ADMIN_ACCOUNT;
         return { success=>0, msg=>"Permission denied, Can't set ${id}'s point" } if $point > 0 && $point != $old_point;
     }
 
@@ -154,6 +157,50 @@ sub editUser() {
     }
 
     { success=>$success, msg=>$db->{errstr} };
+}
+
+# check if all users are still active/inactive in LDAP and update the user list
+sub checkAllUsers() {
+    return { success=>0, msg=>'管理员专用' } if !isAdmin();
+    my @db_users = $db->exec('SELECT userid,logintype FROM USERS;', undef, 1);
+    return { success=>0, msg=>$db->{errstr} } if $db->{err};
+    my %db_users = map {; $_->{userid} => $_->{logintype} } @db_users; # { userid => logintype }
+
+    my $ldap = Net::LDAP->new( $settings::ldapserver ) or do { print "$@"; return { success=>0, msg=>"LDAP connect error" }; };
+    my $mesg;
+    if ( $settings::bindDN && $settings::bindPassword ) {
+        $mesg = $ldap->bind($settings::bindDN, password => $settings::bindPassword);
+    } else {
+        $mesg = $ldap->bind;
+    }
+    $mesg = $ldap->search(
+                           base   => $settings::baseDN,
+                           filter => "(|" . join('', map {;"(uid=$_)"} keys %db_users) . ")", # (|(uid=1)(uid=2))
+                           attrs  => ['uid'],
+                         );
+    $mesg->code && do { print $mesg->error; return { success=>0, msg=>"LDAP search error" } };
+    my %users;
+    foreach my $entry ($mesg->entries) {
+        my $uid = $entry->get_value('uid');
+        my $disabled = $entry->dn() =~ /Disabled/i ? 1 : 0; # CN=uid,OU=Disabled Accounts,DC=internal,DC=company,DC=com
+        $users{$uid} = $disabled;
+    }
+    $mesg = $ldap->unbind;
+
+    my $success = 1;
+    my $updated = [];
+    foreach my $uid ( keys %db_users ) {
+        if ( ( !exists $users{$uid} || $users{$uid} == 1 ) && $db_users{$uid} != DISABLED_ACCOUNT ) {
+            $db->exec('UPDATE USERS set logintype=? where userid=?;', [DISABLED_ACCOUNT, $uid], 0);
+            $success = 0 if $db->{err};
+            push $updated->@*, "$uid => 停用用户" if $success;
+        } elsif ( exists $users{$uid} && $users{$uid} == 0 && $db_users{$uid} == DISABLED_ACCOUNT ) {
+            $db->exec('UPDATE USERS set logintype=? where userid=?;', [NORMAL_ACCOUNT, $uid], 0);
+            $success = 0 if $db->{err};
+            push $updated->@*, "$uid => 普通用户" if $success;
+        }
+    }
+    { success=>$success, msg=>join(', ', $updated->@*) };
 }
 
 sub getPointList() {
@@ -187,7 +234,7 @@ sub getPointList() {
 }
 
 sub getPointHistory() {
-    my $id = get_param('userid') // '';
+    my $id = lc(get_param('userid') // '');
     return { success=>0, points=>[], msg=> 'empty id' } if $id eq '';
     my @points = $db->exec('SELECT match_details.*,matches.date,matches.stage,matches.group_number,series.siries_name,u1.cn_name AS name1,u2.cn_name AS name2 ' .
         'FROM match_details,matches,series,users u1,users u2 WHERE match_details.match_id=matches.match_id AND matches.siries_id=series.siries_id ' .
@@ -388,7 +435,7 @@ sub getMatch() {
 }
 
 sub getMatches($siries_id = undef, $stage = undef, $group_number = undef) {
-    my $id = get_param('userid');
+    my $id = lc(get_param('userid', ''));
     my (@filters, @inputs) = ((), ());
     if ( defined $siries_id ) {
         push @filters, 'siries_id';
@@ -937,14 +984,14 @@ sub check_server($q) {
 }
 
 sub main() {
-    $userid = $ENV{REMOTE_USER} // $ENV{USER}; # web use REMTOE_USER, console test use USER
+    $userid = lc($ENV{REMOTE_USER} // $ENV{USER} // 'unknown'); # web use REMTOE_USER, console test use USER
     $ENV{REQUEST_URI} //= 'unknown'; # for cmdline test
     $q = new CGI;
     check_server($q);
     $db = db->new();
     my $action = $q->param('action') || '';
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
-        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay);
+        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
