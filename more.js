@@ -37,5 +37,9 @@ more = `
         <a target='_blank' href='https://www.meipian7.cn/3o5ydg0d'>2021年辞旧杯</a></br>
     </div>
 
+    <div>
+        <a target='_blank' href='https://www.meipian.cn/52nuzjtq'>2024爱“乒”才会赢</a></br>
+    </div>
+
 </div>
 `;
