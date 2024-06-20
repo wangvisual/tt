@@ -81,3 +81,9 @@ span.avatar:hover span {
     margin-bottom: 10px;
 }
 
+/* center bracket */
+.jQBracket{
+    margin-left: auto;
+    margin-right: auto;
+}
+

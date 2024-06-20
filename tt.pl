@@ -37,9 +37,12 @@ eval {
 use db;
 
 my $imgd = 'etc';
+my $jquery = 'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1';
 my $extjs = 'https://cdnjs.cloudflare.com/ajax/libs/extjs/3.4.1-1';
 my $echarts = 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.1.2';
 my $sprintf = 'https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.1.2';
+# for bracket view, use either https://github.com/teijo/jquery-bracket or https://github.com/sbachinin/bracketry
+my $bracket = 'https://cdnjs.cloudflare.com/ajax/libs/jquery-bracket/0.11.0';
 
 my $userid = '';
 my ($q,$db);
@@ -569,6 +572,97 @@ sub getSeriesMatchGroups() {
     { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
 }
 
+sub getSeriesMatchBracket($matches, $names) {
+    # 1st sort the matches by match_id
+    # then group the mathces into different rounds by scaning all the participants
+    # if the participants are not in the same round, then add it to the current round
+    # if found one participants already in the current round, then add the new one to the next round
+
+    my @sorted = sort { $a->{match_id} <=> $b->{match_id} } $matches->@*;
+    my @rounds; # ( [match1, match2,...), (match3, match4), ... )
+    my %round_participants; # { 0 => { userid1 => 1, userid2 => 1 }, 1 => { userid1 => 1, userid4 => 1 }, ... }
+    my $round = 0;
+    foreach my $m ( @sorted ) {
+        my $found = 0;
+        foreach my $p ( $m->{userid}, $m->{userid2} ) {
+            if ( exists $round_participants{$round}->{$p} ) {
+                $round++;
+                $found = 1;
+                last;
+            }
+        }
+        $round_participants{$round}->{$m->{userid}} = 1;
+        $round_participants{$round}->{$m->{userid2}} = 1;
+        push $rounds[$round]->@*, $m;
+    }
+
+    # if the final round has bronze medal match, then it should be last element in the final round
+    if ( scalar $rounds[-1]->@* == 2 ) {
+        # check the previous round for is the winner is the same in the last element
+        foreach my $m ( $rounds[-2]->@* ) {
+            if ( $m->{userid} eq $rounds[-1]->[1]->{userid} ) {
+                $rounds[-1] = [ $rounds[-1]->[1], $rounds[-1]->[0] ];
+                last;
+            }
+        }
+
+    }
+
+    # 2nd, sort the matches in each round by the participants in next round
+    # eg, if A and B plays in round 2, then A and B should be in the same (half) zone in round 1
+    # the final round may contains match for bronze medal and gold medal
+
+    my $total_rounds = scalar @rounds;
+    foreach ( my $r = $total_rounds-1; $r >= 0; $r-- ) {
+        next if $r == $total_rounds-1;
+        my $sort_priority = {}; # { userid1 => 0, userid2 => 1, ... }
+        my $priority = 0;
+        foreach my $m ( $rounds[$r+1]->@* ) { # based on next round
+            $sort_priority->{$m->{userid}} = $priority;
+            $sort_priority->{$m->{userid2}} = $priority;
+            $priority++;
+        }
+        $rounds[$r] = [ sort { $sort_priority->{$a->{userid}} <=> $sort_priority->{$b->{userid}} } $rounds[$r]->@* ];
+    }
+
+    # 3rd, draw the bracket
+    # { "teams": [              // Matchups
+    #     ["Team 1", "Team 2"], // First match
+    #     ["Team 3", "Team 4"]  // Second match
+    # ],
+    # "results": [              // List of brackets (single elimination, so only one bracket)
+    #   [                       // List of rounds in bracket
+    #     [                     // First round in this bracket
+    #       [1, 2, "details"],  // Team 1 vs Team 2
+    #       [3, 4, "details"],  // Team 3 vs Team 4
+    #     ],
+    #     [                     // Second (final) round in single elimination bracket
+    #       [5, 6],             // Match for first place, so it's team 2 vs team 4
+    #       [7, 8]              // Match for 3rd place
+    #] ],
+    #] }
+
+    my @teams; # ( [name1, name2], ... ), only need from round 0
+    my @results; # ( [ [ [1, 2, "details"], [3, 4, "details"] ], [ [5, 6], [7, 8] ] ], ... )
+    my $pariticpants_order = {}; # { userid1 => 1, userid2 => 2, ... }
+    my $order = 0;
+    foreach my $m ( $rounds[0]->@* ) {
+        push @teams, [ $names->{$m->{userid}}, $names->{$m->{userid2}} ];
+        $pariticpants_order->{$m->{userid}} = $order++;
+        $pariticpants_order->{$m->{userid2}} = $order++;
+    }
+    foreach my $r ( 0..$total_rounds-1 ) {
+        my @round;
+        foreach my $m ( $rounds[$r]->@* ) {
+            # $m is winners' view of the match
+            my $user1_win = $pariticpants_order->{$m->{userid}} < $pariticpants_order->{$m->{userid2}} ? 1 : 0;
+            push @round, [ $user1_win ? $m->{game_win} : $m->{game_lose}, $user1_win ? $m->{game_lose} : $m->{game_win}, $m ];
+        }
+        push @results, [ @round ];
+    }
+    { success=>1, metaData=>{root=>'bracket', fields=>['teams']}, bracket => {teams=>\@teams, results=>\@results} };
+}
+
 sub getSeriesMatch() {
     my $siries_id = get_param('siries_id') || -1;
     return { success=>0, msg=>"输入无效" } if $siries_id == -1;
@@ -584,8 +678,9 @@ sub getSeriesMatch() {
     foreach ( $userlist->{users}->@* ) {
         $name{$_->{userid}} = $_->{cn_name};
     }
-    # change to 2 dimension table
     my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
+    return getSeriesMatchBracket($matches, \%name) if $stage == 2;
+    # change to 2 dimension table
     my %cross; # { userid1 => { userid2 => { 'result' => '0:2', 'win' => 0, 'game' => '2019-08-21, 13:15, 7:11', 'match_id' => 26 }, userid3 => {} }, ... }
     my %cross_detail; # { userid1 => { userid2 => { sorting: undef, win: 1, game_win: 0, game_lose: 2, point_win: 23, point_lose: 33}, ...}, ... }
     my %score_detail; #
@@ -957,13 +1052,16 @@ sub printheader($q) {
                          -author=>'Opera.Wang',
                          -head=>Link({-rel=>'SHORTCUT ICON',-type=>'image/x-icon',-href=>"$imgd/tt.png"}),
                          -style=>{-src => ["$extjs/resources/css/ext-all.css",
+                                           "$bracket/jquery.bracket.min.css",
                                            "tt.css",
                                           ]
                                  },
-                         -script=>[{-src=>"$extjs/adapter/ext/ext-base.js"},
+                         -script=>[{-src=>"$jquery/jquery" . ( $settings::debug ? "" : ".min" ) . ".js"},
+                                   {-src=>"$extjs/adapter/ext/ext-base.js"},
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
-                                   {-src=>"$sprintf/sprintf" . ( $settings::debug ? ".min" : "" ) . ".js"},
-                                   {-src=>"$echarts/echarts" . ( $settings::debug ? ".min" : "" ) . ".js"},
+                                   {-src=>"$sprintf/sprintf" . ( $settings::debug ? "" : ".min" ) . ".js"},
+                                   {-src=>"$echarts/echarts" . ( $settings::debug ? "" : ".min" ) . ".js"},
+                                   {-src=>"$bracket/jquery.bracket.min.js"},
                                    {-code=>$js_settings},
                                    {-src=>'more.js'},
                                    {-src=>"DynaGrid.js"},

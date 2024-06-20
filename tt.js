@@ -1121,49 +1121,68 @@ TT.app = function() {
         });
     };
     var showSeriesMatch = function(siries_id, siries_name, stage, group_number) {
-        var grid_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
-        listpanel.remove(grid_id);
+        var content_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
+        listpanel.remove(content_id);
+        var title = siries_name + ' ' + renderStage(stage) + ' 第' + group_number + '组 结果';
+        var content;
         var myds = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
             baseParams: {action: 'getSeriesMatch', siries_id: siries_id, stage: stage, group_number: group_number},
             autoDestroy: true,
+            autoLoad: false,
         });
-        var grid = new Ext.ux.DynamicGridPanel({
-            id: grid_id,
-            ds: myds,
-            rowNumberer: true,
-            title : siries_name + ' ' + renderStage(stage) + ' 第' + group_number + '组 结果',
-            autoHeight: true,
-            border: false,
-            frame: true,
-            renders: {
-                renderRatio: function(value, metadata, record) {
-                    if ( typeof(value) != 'object' ) {
-                        metadata.css = metadata.css +" diagonalFalling";
-                        return '';
-                    }
-                    if ( typeof(value.win) != 'undefined' ) {
-                        metadata.css = metadata.css + ( value.win ? " win" : ( value.waive ? " waive" : " lose" ) );
-                        // http://developer.51cto.com/art/200907/133445.htm
-                        // metadata.cellAttr is for the td, and will be masked for the div inside
-                        // metadata.attr is for the div inside the td
-                        // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
-                        metadata.attr = 'ext:qtip="' + ( value.waive ? '弃权' :  value.game ) + '"';
-                    }
-                    return value.result;
+        if ( stage == 1 ) {
+            content = new Ext.ux.DynamicGridPanel({
+                id: content_id,
+                ds: myds,
+                rowNumberer: true,
+                title : title,
+                autoHeight: true,
+                border: false,
+                frame: true,
+                renders: {
+                    renderRatio: function(value, metadata, record) {
+                        if ( typeof(value) != 'object' ) {
+                            metadata.css = metadata.css +" diagonalFalling";
+                            return '';
+                        }
+                        if ( typeof(value.win) != 'undefined' ) {
+                            metadata.css = metadata.css + ( value.win ? " win" : ( value.waive ? " waive" : " lose" ) );
+                            // http://developer.51cto.com/art/200907/133445.htm
+                            // metadata.cellAttr is for the td, and will be masked for the div inside
+                            // metadata.attr is for the div inside the td
+                            // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
+                            metadata.attr = 'ext:qtip="' + ( value.waive ? '弃权' :  value.game ) + '"';
+                        }
+                        return value.result;
+                    },
+                    renderScore: function(value, metadata, record) {
+                        if ( !value || typeof(value) != 'object' ) {
+                            value = { value: 0 };
+                        }
+                        metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 弃权:' + (value.waive || 0) + ', 共:' + (value.total || 0) + '"';
+                        return value.value;
+                    },
                 },
-                renderScore: function(value, metadata, record) {
-                    if ( !value || typeof(value) != 'object' ) {
-                        value = { value: 0 };
-                    }
-                    metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 弃权:' + (value.waive || 0) + ', 共:' + (value.total || 0) + '"';
-                    return value.value;
-                },
-            },
-        });
+            });
+        } else {
+            content = new Ext.Panel({
+                id: content_id,
+                title : title,
+                border: true,
+            });
+            myds.on('load', function(store, records, options ) {
+                $(function() {
+                    $('#' + content_id + " :nth-child(2)").bracket({ // replace the content's body with bracket view
+                        init: store.reader.jsonData.bracket,
+                    });
+                });
+            });
+            myds.load();
+        }
 
-        listpanel.add(grid);
+        listpanel.add(content);
     };
 
     // public space
