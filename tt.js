@@ -1167,15 +1167,57 @@ TT.app = function() {
                 },
             });
         } else {
+            function render_bracket(container, team, score, state) {
+                switch(state) {
+                    case 'empty-bye':
+                    case 'empty-tbd':
+                        return;
+                    default:
+                        container.append("<span class='bracket_team'><img src='" + getAvatar(team) +  "'/> " + team.cn_name + "</span>");
+                        return;
+                }
+            }
             content = new Ext.Panel({
                 id: content_id,
                 title : title,
                 border: true,
+                items: [{
+                    text: '结果在此',
+                    id: content_id + '_bracket',
+                },{
+                    text: "\u00A0", // non-breaking space
+                    id: content_id + '_info',
+                }]
             });
+            var tooltip = new Ext.ToolTip({
+                target: content_id,
+                autoHide: true,
+                closable: false,
+                autoShow: false,
+                items: [{
+                    xtype: 'label',
+                    text: '',
+                    id: content_id + '_tooltip',
+                }],
+            });
+            var tooltip_content = $('#' + content_id + '_tooltip');
             myds.on('load', function(store, records, options ) {
                 $(function() {
-                    $('#' + content_id + " :nth-child(2)").bracket({ // replace the content's body with bracket view
+                    bracket = $('#' + content_id + "_bracket");
+                    bracket.bracket({ // replace with bracket view
+                        teamWidth: 120,
                         init: store.reader.jsonData.bracket,
+                        onMatchHover: function(data, hover) {
+                            $('#' + content_id + '_info').text(hover ? data.date + ' ' + data.full_name + ' vs. ' + data.full_name2 + ' ' + data.game : "\u00A0");
+                            if (!hover) return tooltip.hide();
+                            tooltip.targetXY = content.getPosition();
+                            tooltip_content.text(data.date + ' ' + data.full_name + ' vs. ' + data.full_name2 + ' ' + data.game);
+                            tooltip.show();
+                        },
+                        decorator: {
+                            render: render_bracket,
+                            edit: function() {},
+                        },
                     });
                 });
             });

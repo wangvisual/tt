@@ -87,3 +87,11 @@ span.avatar:hover span {
     margin-right: auto;
 }
 
+.bracket_team img{
+    width: 16px;
+    height: 16px;
+    margin-left: 5px;
+    margin-right: 5px;
+    veritcal-align: bottom;
+}
+

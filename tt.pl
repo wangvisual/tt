@@ -572,7 +572,11 @@ sub getSeriesMatchGroups() {
     { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
 }
 
-sub getSeriesMatchBracket($matches, $names) {
+sub getSeriesMatchBracket($matches, $users) {
+    my %name;
+    foreach ( $users->{users}->@* ) {
+        $name{$_->{userid}} = $_;
+    }
     # 1st sort the matches by match_id
     # then group the mathces into different rounds by scaning all the participants
     # if the participants are not in the same round, then add it to the current round
@@ -583,6 +587,7 @@ sub getSeriesMatchBracket($matches, $names) {
     my %round_participants; # { 0 => { userid1 => 1, userid2 => 1 }, 1 => { userid1 => 1, userid4 => 1 }, ... }
     my $round = 0;
     foreach my $m ( @sorted ) {
+        $m->{game} = join(',', map {; "$_->{win}:$_->{lose}" } $m->{games}->@*);
         my $found = 0;
         foreach my $p ( $m->{userid}, $m->{userid2} ) {
             if ( exists $round_participants{$round}->{$p} ) {
@@ -597,7 +602,7 @@ sub getSeriesMatchBracket($matches, $names) {
     }
 
     # if the final round has bronze medal match, then it should be last element in the final round
-    if ( scalar $rounds[-1]->@* == 2 ) {
+    if ( 2 ** scalar @rounds == scalar keys $round_participants{0}->%* && scalar $rounds[-1]->@* == 2 ) {
         # check the previous round for is the winner is the same in the last element
         foreach my $m ( $rounds[-2]->@* ) {
             if ( $m->{userid} eq $rounds[-1]->[1]->{userid} ) {
@@ -642,12 +647,12 @@ sub getSeriesMatchBracket($matches, $names) {
     #] ],
     #] }
 
-    my @teams; # ( [name1, name2], ... ), only need from round 0
+    my @teams; # ( [{userid, name, ...}, id2 => {userid, name,...}, ... ), only need from round 0
     my @results; # ( [ [ [1, 2, "details"], [3, 4, "details"] ], [ [5, 6], [7, 8] ] ], ... )
     my $pariticpants_order = {}; # { userid1 => 1, userid2 => 2, ... }
     my $order = 0;
     foreach my $m ( $rounds[0]->@* ) {
-        push @teams, [ $names->{$m->{userid}}, $names->{$m->{userid2}} ];
+        push @teams, [ $name{$m->{userid}}, $name{$m->{userid2}} ];
         $pariticpants_order->{$m->{userid}} = $order++;
         $pariticpants_order->{$m->{userid2}} = $order++;
     }
@@ -674,12 +679,12 @@ sub getSeriesMatch() {
     return $data if !$data->{success};
     my $userlist = getUserList();
     return $userlist if !$userlist->{success};
+    my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
+    return getSeriesMatchBracket($matches, $userlist) if $stage == 2;
     my %name;
     foreach ( $userlist->{users}->@* ) {
         $name{$_->{userid}} = $_->{cn_name};
     }
-    my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
-    return getSeriesMatchBracket($matches, \%name) if $stage == 2;
     # change to 2 dimension table
     my %cross; # { userid1 => { userid2 => { 'result' => '0:2', 'win' => 0, 'game' => '2019-08-21, 13:15, 7:11', 'match_id' => 26 }, userid3 => {} }, ... }
     my %cross_detail; # { userid1 => { userid2 => { sorting: undef, win: 1, game_win: 0, game_lose: 2, point_win: 23, point_lose: 33}, ...}, ... }
@@ -1061,7 +1066,7 @@ sub printheader($q) {
                                    {-src=>"$extjs/ext-all" . ( $settings::debug ? "-debug" : "" ) . ".js"},
                                    {-src=>"$sprintf/sprintf" . ( $settings::debug ? "" : ".min" ) . ".js"},
                                    {-src=>"$echarts/echarts" . ( $settings::debug ? "" : ".min" ) . ".js"},
-                                   {-src=>"$bracket/jquery.bracket.min.js"},
+                                   {-src=>$settings::debug ? 'https://cdn.jsdelivr.net/npm/jquery-bracket/src/jquery.bracket.js' : "$bracket/jquery.bracket.min.js"},
                                    {-code=>$js_settings},
                                    {-src=>'more.js'},
                                    {-src=>"DynaGrid.js"},
