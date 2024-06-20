@@ -1185,40 +1185,22 @@ TT.app = function() {
                     text: '结果在此',
                     id: content_id + '_bracket',
                 },{
-                    text: "\u00A0", // non-breaking space
+                    text: "\u{3000}", // chinese space character
                     id: content_id + '_info',
                 }]
             });
-            var tooltip = new Ext.ToolTip({
-                target: content_id,
-                autoHide: true,
-                closable: false,
-                autoShow: false,
-                items: [{
-                    xtype: 'label',
-                    text: '',
-                    id: content_id + '_tooltip',
-                }],
-            });
-            var tooltip_content = $('#' + content_id + '_tooltip');
             myds.on('load', function(store, records, options ) {
-                $(function() {
-                    bracket = $('#' + content_id + "_bracket");
-                    bracket.bracket({ // replace with bracket view
-                        teamWidth: 120,
-                        init: store.reader.jsonData.bracket,
-                        onMatchHover: function(data, hover) {
-                            $('#' + content_id + '_info').text(hover ? data.date + ' ' + data.full_name + ' vs. ' + data.full_name2 + ' ' + data.game : "\u00A0");
-                            if (!hover) return tooltip.hide();
-                            tooltip.targetXY = content.getPosition();
-                            tooltip_content.text(data.date + ' ' + data.full_name + ' vs. ' + data.full_name2 + ' ' + data.game);
-                            tooltip.show();
-                        },
-                        decorator: {
-                            render: render_bracket,
-                            edit: function() {},
-                        },
-                    });
+                $('#' + content_id + "_info").addClass('bracket_info');
+                $('#' + content_id + "_bracket").bracket({ // replace with bracket view
+                    teamWidth: 120,
+                    init: store.reader.jsonData.bracket,
+                    onMatchHover: function(data, hover) {
+                        $('#' + content_id + "_info").text(hover ? data.date + ' ' + data.cn_name + ' vs. ' + data.cn_name2 + ' ' + data.game + ' 积分增减:' + (data.point_after - data.point_before): '\u{3000}');
+                    },
+                    decorator: {
+                        render: render_bracket,
+                        edit: function() {},
+                    },
                 });
             });
             myds.load();

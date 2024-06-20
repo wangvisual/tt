@@ -588,6 +588,8 @@ sub getSeriesMatchBracket($matches, $users) {
     my $round = 0;
     foreach my $m ( @sorted ) {
         $m->{game} = join(',', map {; "$_->{win}:$_->{lose}" } $m->{games}->@*);
+        $m->{cn_name} = $name{$m->{userid}}->{cn_name};
+        $m->{cn_name2} = $name{$m->{userid2}}->{cn_name};
         my $found = 0;
         foreach my $p ( $m->{userid}, $m->{userid2} ) {
             if ( exists $round_participants{$round}->{$p} ) {

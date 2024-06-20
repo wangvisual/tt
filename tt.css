@@ -83,8 +83,11 @@ span.avatar:hover span {
 
 /* center bracket */
 .jQBracket{
-    margin-left: auto;
-    margin-right: auto;
+    margin: auto;
+}
+
+div.jQBracket .bracket {
+    float: none !important;
 }
 
 .bracket_team img{
@@ -93,5 +96,12 @@ span.avatar:hover span {
     margin-left: 5px;
     margin-right: 5px;
     veritcal-align: bottom;
+}
+
+.bracket_info {
+    display: block;
+    text-align: center;
+    margin: auto;
+    color:444
 }
 
