@@ -1132,7 +1132,7 @@ TT.app = function() {
             autoDestroy: true,
             autoLoad: false,
         });
-        if ( stage == 1 ) {
+        if ( stage != 2 ) {
             content = new Ext.ux.DynamicGridPanel({
                 id: content_id,
                 ds: myds,

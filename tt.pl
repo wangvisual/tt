@@ -14,6 +14,7 @@ use Encode;
 use CGI qw/:all/;
 use Data::Dumper;
 use Mail::Sendmail;
+use File::stat;
 use Scalar::Util;
 use JSON::XS;
 use Time::Piece;
@@ -670,6 +671,29 @@ sub getSeriesMatchBracket($matches, $users) {
     { success=>1, metaData=>{root=>'bracket', fields=>['teams']}, bracket => {teams=>\@teams, results=>\@results} };
 }
 
+sub getSeriesMatchChallengeView($matches, $users) {
+    my %name;
+    foreach ( $users->{users}->@* ) {
+        $name{$_->{userid}} = $_;
+    }
+    my %meta = ( root => 'results', id => 'userid', fields => [{name=>'match_id'}, {name=>'date'}, {name=>'full_name'}, {name=>'win_lose'},
+               {name=>'full_name2'}, {name=>'game'}, {name=>'score'}, {name=>'point_detail'}, {name=>'point_detail2'}] );
+    my $results = [ map {; { match_id => $_->{match_id}, date => $_->{date}, full_name => $_->{full_name}, win_lose => "$_->{game_win}:$_->{game_lose}",
+                             full_name2 => $_->{full_name2}, game => join(', ', map {; "$_->{win}:$_->{lose}" } $_->{games}->@*),
+                             score => $_->{point_after} - $_->{point_before}, point_detail => "$_->{point_before} => $_->{point_after}",
+                             point_detail2 => "$_->{point_before2} => $_->{point_after2}" }
+                  } sort { $b->{match_id} <=> $a->{match_id} } $matches->@* ];
+    my $columns = [ {header => '比赛日期', dataIndex => 'date'},
+                    {header => '选手1', dataIndex => 'full_name'},
+                    {header => '比分', dataIndex => 'win_lose'},
+                    {header => '选手2', dataIndex => 'full_name2'},
+                    {header => '局分', dataIndex => 'game'},
+                    {header => '积分增减', dataIndex => 'score'},
+                    {header => '选手1', dataIndex => 'point_detail'},
+                    {header => '选手2', dataIndex => 'point_detail2'} ];
+    { success=>1, metaData=>\%meta, results => $results, columns => $columns };
+}
+
 sub getSeriesMatch() {
     my $siries_id = get_param('siries_id') || -1;
     return { success=>0, msg=>"输入无效" } if $siries_id == -1;
@@ -683,6 +707,7 @@ sub getSeriesMatch() {
     return $userlist if !$userlist->{success};
     my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
     return getSeriesMatchBracket($matches, $userlist) if $stage == 2;
+    return getSeriesMatchChallengeView($matches, $userlist) if $stage == 3;
     my %name;
     foreach ( $userlist->{users}->@* ) {
         $name{$_->{userid}} = $_->{cn_name};
@@ -1054,6 +1079,7 @@ sub printheader($q) {
                     );
     my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n" .
                       "var debug=$settings::debug;\nvar more='';\n";
+    my $tt_js_time = stat("$RealBin/tt.js")->mtime;
     print $q->start_html(-title=>$settings::title,
                          -encoding=>'utf-8',
                          -author=>'Opera.Wang',
@@ -1072,7 +1098,7 @@ sub printheader($q) {
                                    {-code=>$js_settings},
                                    {-src=>'more.js'},
                                    {-src=>"DynaGrid.js"},
-                                   {-src=>"tt.js"},
+                                   {-src=>"tt.js?$tt_js_time"},
                                   ],
                          -meta=>{'keywords'=>'Table Tennis',
                                 },
