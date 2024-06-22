@@ -126,8 +126,8 @@ TT.app = function() {
         return dirty;
     }
 
-    function getAvatar(data) {
-        if ( !avatar_template ) {
+    function getAvatar(data, use_template=true) {
+        if ( !avatar_template || !use_template ) {
             return 'etc/' + data.gender + '.png';
         }
         return sprintf(avatar_template, data);
@@ -1173,7 +1173,7 @@ TT.app = function() {
                     case 'empty-tbd':
                         return;
                     default:
-                        container.append("<span class='bracket_team'><img src='" + getAvatar(team) +  "'/> " + team.cn_name + "</span>");
+                        container.append("<span class='bracket_team'><img src='" + getAvatar(team, 0) +  "'/> " + team.cn_name + "</span>");
                         return;
                 }
             }
