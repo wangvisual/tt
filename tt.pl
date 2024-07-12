@@ -68,7 +68,7 @@ sub send_html_email($to, $cc, $subject, $msg) {
     sendmail(%mail) or print STDERR "Sendmail: $Mail::Sendmail::error\n";
 }
 sub getUserInfo($uid = undef) {
-    $uid //= lc($q->param('userid', ''));
+    $uid //= lc(get_param('userid', ''));
     my $fail = {success=>0, user=>[{}]};
 
     # In DB?
@@ -913,7 +913,7 @@ sub editSeriesUser {
 }
 
 sub getUserList() {
-    my $filter = $q->param('filter') // '';
+    my $filter = get_param('filter', '');
     my $sql = 'SELECT name || ", " || cn_name || ", " || nick_name as full_name, * FROM USERS ' . ( $filter ? 'WHERE logintype<=?' : '' ) . ' ORDER BY userid ASC;';
     my @val = $db->exec($sql, $filter ? [1] : undef, 1);
     { success=>!$db->{error}, users=>\@val };
@@ -1120,7 +1120,7 @@ sub main() {
     $q = new CGI;
     check_server($q);
     $db = db->new();
-    my $action = $q->param('action') || '';
+    my $action = get_param('action', '');
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
         editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers);
     if ( $action ) {
