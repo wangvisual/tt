@@ -20,7 +20,7 @@ use JSON::XS;
 use Time::Piece;
 use Time::Seconds;
 use Net::LDAP;
-use List::Util qw(sum0);
+use List::Util qw(sum0 pairs);
 
 use constant {
     DEFAULT_POINT => 1600,
@@ -573,7 +573,7 @@ sub getSeriesMatchGroups() {
     { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
 }
 
-sub getSeriesMatchBracket($matches, $users) {
+sub getSeriesMatchBracket($matches, $userids, $users) {
     my %name;
     foreach ( $users->{users}->@* ) {
         $name{$_->{userid}} = $_;
@@ -586,22 +586,37 @@ sub getSeriesMatchBracket($matches, $users) {
     my @sorted = sort { $a->{match_id} <=> $b->{match_id} } $matches->@*;
     my @rounds; # ( [match1, match2,...), (match3, match4), ... )
     my %round_participants; # { 0 => { userid1 => 1, userid2 => 1 }, 1 => { userid1 => 1, userid4 => 1 }, ... }
-    my $round = 0;
+    my $added_userids = {};
     foreach my $m ( @sorted ) {
         $m->{game} = join(',', map {; "$_->{win}:$_->{lose}" } $m->{games}->@*);
         $m->{cn_name} = $name{$m->{userid}}->{cn_name};
         $m->{cn_name2} = $name{$m->{userid2}}->{cn_name};
-        my $found = 0;
-        foreach my $p ( $m->{userid}, $m->{userid2} ) {
-            if ( exists $round_participants{$round}->{$p} ) {
-                $round++;
-                $found = 1;
+        my $round;
+        foreach ( $round = 0; $round < scalar keys %round_participants; $round++ ) {
+            if ( exists $round_participants{$round}->{$m->{userid}} || exists $round_participants{$round}->{$m->{userid2}} ) {
+                next;
+            } else {
                 last;
             }
         }
         $round_participants{$round}->{$m->{userid}} = 1;
         $round_participants{$round}->{$m->{userid2}} = 1;
         push $rounds[$round]->@*, $m;
+        if ( $round == 0 ) {
+            $added_userids->{$m->{userid}} = 1;
+            $added_userids->{$m->{userid2}} = 1;
+        }
+    }
+    # add the not added userids to the first round
+    my @not_added = ();
+    foreach ( $userids->@* ) {
+        next if exists $added_userids->{$_->{userid}};
+        push @not_added, $_->{userid};
+    }
+    foreach my $m ( pairs @not_added ) {
+        $round_participants{0}->{$m->[0]} = 1;
+        $round_participants{0}->{$m->[1]} = 1;
+        push $rounds[0]->@*, { userid => $m->[0], userid2 => $m->[1], cn_name => $name{$m->[0]}->{cn_name}, cn_name2 => $name{$m->[1]}->{cn_name} };
     }
 
     # if the final round has bronze medal match, then it should be last element in the final round
@@ -706,7 +721,7 @@ sub getSeriesMatch() {
     my $userlist = getUserList();
     return $userlist if !$userlist->{success};
     my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
-    return getSeriesMatchBracket($matches, $userlist) if $stage == 2;
+    return getSeriesMatchBracket($matches, \@userids, $userlist) if $stage == 2;
     return getSeriesMatchChallengeView($matches, $userlist) if $stage == 3;
     my %name;
     foreach ( $userlist->{users}->@* ) {
