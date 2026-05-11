@@ -706,7 +706,36 @@ sub getSeriesMatchChallengeView($matches, $users) {
                     {header => '积分增减', dataIndex => 'score'},
                     {header => '选手1', dataIndex => 'point_detail'},
                     {header => '选手2', dataIndex => 'point_detail2'} ];
-    { success=>1, metaData=>\%meta, results => $results, columns => $columns };
+
+    # Calculate per-user point changes by summing each match's delta within this Series.
+    # Using per-match deltas avoids confusion from point changes in other Series.
+    my %user_points; # { userid => { full_name=>.., change=>0, matches=>0, vs=>{ uid2=>{ cn_name=>.., change=>0 } } } }
+    foreach my $m ($matches->@*) {
+        my ($uid1, $uid2) = ($m->{userid}, $m->{userid2});
+        my $delta1 = $m->{point_after}  - $m->{point_before};
+        my $delta2 = $m->{point_after2} - $m->{point_before2};
+        my $cn1 = $name{$uid1}{cn_name};
+        my $cn2 = $name{$uid2}{cn_name};
+        $user_points{$uid1}{full_name} //= $m->{full_name};
+        $user_points{$uid2}{full_name} //= $m->{full_name2};
+        $user_points{$uid1}{change}    += $delta1;
+        $user_points{$uid2}{change}    += $delta2;
+        $user_points{$uid1}{matches}   += 1;
+        $user_points{$uid2}{matches}   += 1;
+        $user_points{$uid1}{vs}{$uid2}{cn_name} //= $cn2;
+        $user_points{$uid1}{vs}{$uid2}{change}  += $delta1;
+        $user_points{$uid2}{vs}{$uid1}{cn_name} //= $cn1;
+        $user_points{$uid2}{vs}{$uid1}{change}  += $delta2;
+    }
+    my $point_changes = [ map {
+        my ($uid, $up) = ($_, $user_points{$_});
+        my $details = join ', ', map {; "$_->{cn_name}: " . ($_->{change} >= 0 ? "+$_->{change}" : "$_->{change}") }
+                      sort { $b->{change} <=> $a->{change} } values %{$up->{vs}};
+        { userid => $uid, full_name => $up->{full_name}, change => $up->{change},
+          matches => $up->{matches}, details => $details }
+    } sort { $user_points{$b}{change} <=> $user_points{$a}{change} } keys %user_points ];
+
+    { success=>1, metaData=>\%meta, results => $results, columns => $columns, point_changes => $point_changes };
 }
 
 sub getSeriesMatch() {

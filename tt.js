@@ -1132,7 +1132,78 @@ TT.app = function() {
             autoDestroy: true,
             autoLoad: false,
         });
-        if ( stage != 2 ) {
+        var stageRenders = {
+            renderRatio: function(value, metadata, record) {
+                if ( typeof(value) != 'object' ) {
+                    metadata.css = metadata.css +" diagonalFalling";
+                    return '';
+                }
+                if ( typeof(value.win) != 'undefined' ) {
+                    metadata.css = metadata.css + ( value.win ? " win" : ( value.waive ? " waive" : " lose" ) );
+                    // http://developer.51cto.com/art/200907/133445.htm
+                    // metadata.cellAttr is for the td, and will be masked for the div inside
+                    // metadata.attr is for the div inside the td
+                    // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
+                    metadata.attr = 'ext:qtip="' + ( value.waive ? '弃权' :  value.game ) + '"';
+                }
+                return value.result;
+            },
+            renderScore: function(value, metadata, record) {
+                if ( !value || typeof(value) != 'object' ) {
+                    value = { value: 0 };
+                }
+                metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 弃权:' + (value.waive || 0) + ', 共:' + (value.total || 0) + '"';
+                return value.value;
+            },
+        };
+        if ( stage == 3 ) {
+            // Challenge view: matches table + point-changes summary table
+            var matchGrid = new Ext.ux.DynamicGridPanel({
+                id: content_id + '_matches',
+                ds: myds,
+                rowNumberer: true,
+                title: title,
+                autoHeight: true,
+                border: false,
+                frame: true,
+                renders: stageRenders,
+            });
+            content = new Ext.Panel({
+                id: content_id,
+                border: false,
+                autoHeight: true,
+                items: [matchGrid],
+            });
+            myds.on('load', function(store) {
+                var pointChanges = store.reader.jsonData.point_changes || [];
+                var pointStore = new Ext.data.ArrayStore({
+                    fields: ['full_name', 'change', 'matches', 'details'],
+                    data: pointChanges.map(function(r) { return [r.full_name, r.change, r.matches, r.details]; }),
+                });
+                var pointGrid = new Ext.grid.GridPanel({
+                    id: content_id + '_points',
+                    title: '积分变化汇总',
+                    store: pointStore,
+                    columns: [
+                        new Ext.grid.RowNumberer({width: 30}),
+                        {header: '选手', dataIndex: 'full_name', width: 200},
+                        {header: '积分变化', dataIndex: 'change', width: 80},
+                        {header: '场数', dataIndex: 'matches', width: 50},
+                        {header: '明细', dataIndex: 'details', width: 400, renderer: function(value, metadata) {
+                            metadata.attr = 'ext:qtip="' + Ext.util.Format.htmlEncode(value) + '"';
+                            return value;
+                        }},
+                    ],
+                    autoHeight: true,
+                    border: false,
+                    frame: true,
+                    stripeRows: true,
+                    viewConfig: {forceFit: true},
+                });
+                content.add(pointGrid);
+                content.doLayout();
+            });
+        } else if ( stage != 2 ) {
             content = new Ext.ux.DynamicGridPanel({
                 id: content_id,
                 ds: myds,
@@ -1141,30 +1212,7 @@ TT.app = function() {
                 autoHeight: true,
                 border: false,
                 frame: true,
-                renders: {
-                    renderRatio: function(value, metadata, record) {
-                        if ( typeof(value) != 'object' ) {
-                            metadata.css = metadata.css +" diagonalFalling";
-                            return '';
-                        }
-                        if ( typeof(value.win) != 'undefined' ) {
-                            metadata.css = metadata.css + ( value.win ? " win" : ( value.waive ? " waive" : " lose" ) );
-                            // http://developer.51cto.com/art/200907/133445.htm
-                            // metadata.cellAttr is for the td, and will be masked for the div inside
-                            // metadata.attr is for the div inside the td
-                            // return '<span ext:qtip="test">' + value.result + '</span>' for value should also work.
-                            metadata.attr = 'ext:qtip="' + ( value.waive ? '弃权' :  value.game ) + '"';
-                        }
-                        return value.result;
-                    },
-                    renderScore: function(value, metadata, record) {
-                        if ( !value || typeof(value) != 'object' ) {
-                            value = { value: 0 };
-                        }
-                        metadata.attr = 'ext:qtip="胜:' + (value.win || 0) + ', 负:' + (value.lose || 0) + ', 弃权:' + (value.waive || 0) + ', 共:' + (value.total || 0) + '"';
-                        return value.value;
-                    },
-                },
+                renders: stageRenders,
             });
         } else {
             function render_bracket(container, team, score, state) {
