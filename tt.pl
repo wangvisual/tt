@@ -42,7 +42,7 @@ my $jquery = 'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1';
 my $extjs = 'https://cdnjs.cloudflare.com/ajax/libs/extjs/3.4.1-1';
 my $echarts = 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.1.2';
 my $sprintf = 'https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.1.2';
-# for bracket view, use either https://github.com/teijo/jquery-bracket or https://github.com/sbachinin/bracketry
+# for bracket view, use either https://github.com/teijo/jquery-bracket or https://github.com/sbachinin/bracketry, or https://github.com/Drarig29/brackets-viewer.js
 my $bracket = 'https://cdnjs.cloudflare.com/ajax/libs/jquery-bracket/0.11.0';
 
 my $userid = '';
@@ -320,8 +320,8 @@ sub editMatch() {
         push @to, $_->{email} if $_->{email} =~ /\@/;
         $names{$_->{userid}} = $_->{full_name};
     }
-    # 自由约战使用当前积分作为参考分，其它比赛使用快照积分
-    my $basePoint = getBasePoint($siries_id, $siries_id == 1 ? 'users' : 'capture');
+    # 淘汰赛/自由约战使用当前积分作为参考分，其它比赛阶段使用快照积分
+    my $basePoint = getBasePoint($siries_id, $stage == 2 || $stage == 3 ? 'users' : 'capture');
     $ref1 = $basePoint->{$userid1} || $point1;
     $ref2 = $basePoint->{$userid2} || $point2;
     my ($new_point1, $new_point2) = calcPoints($win1-$win2, $point1, $point2, $ref1, $ref2);
