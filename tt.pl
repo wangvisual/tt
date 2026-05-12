@@ -731,8 +731,8 @@ sub getSeriesMatchChallengeView($matches, $users) {
         my ($uid, $up) = ($_, $user_points{$_});
         my $details = join ', ', map {; "$_->{cn_name}: " . ($_->{change} >= 0 ? "+$_->{change}" : "$_->{change}") }
                       sort { $b->{change} <=> $a->{change} } values %{$up->{vs}};
-        { userid => $uid, full_name => $up->{full_name}, change => $up->{change},
-          matches => $up->{matches}, details => $details }
+        { userid => $uid, full_name => $up->{full_name}, current_point => $name{$uid}{point},
+          change => $up->{change}, matches => $up->{matches}, details => $details }
     } sort { $user_points{$b}{change} <=> $user_points{$a}{change} } keys %user_points ];
 
     { success=>1, metaData=>\%meta, results => $results, columns => $columns, point_changes => $point_changes };
