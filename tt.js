@@ -517,7 +517,7 @@ TT.app = function() {
                 },},
                 { fieldLabel: '小组', xtype: 'combo', id: 'edit_group', name: 'group_fake', allowBlank: false, editable: false, forceSelection: true, autoSelect: true,
                     triggerAction: 'all', mode: 'local', store: groups_store, displayField: 'show', valueField: 'number', hiddenName: 'group' },
-                { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false },
+                { fieldLabel: '比赛日期', xtype: 'datefield', format: 'Y-m-d', name: 'date', allowBlank: false, value: new Date() },
                 { layout : "column", xtype: 'container', defaults: {layout: 'form'}, items: [
                     { fieldLabel: '', xtype: 'combo', id: 'edituser1combo', name: 'user1_fake', allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
                       triggerAction: 'all', mode: 'local',
