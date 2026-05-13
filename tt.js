@@ -910,7 +910,7 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
-    var showMatches = function(id) {
+    var showMatches = function(id, id2) {
         var userList = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
@@ -922,8 +922,8 @@ TT.app = function() {
             fields: userRecord,
             listeners: {
                 load: function(store, records, options ) {
-                    if ( !id ) return;
-                    Ext.getCmp('match_filter').setValue( store.getById(id).get('full_name') );
+                    if ( id )  Ext.getCmp('match_filter').setValue( store.getById(id).get('full_name') );
+                    if ( id2 ) Ext.getCmp('match_filter2').setValue( store.getById(id2).get('full_name') );
                 }
             },
         });
@@ -956,7 +956,7 @@ TT.app = function() {
                         url: tturl,
                         method: 'POST'
                    }),
-            baseParams: {action: 'getMatches', userid: id},
+            baseParams: {action: 'getMatches', userid: id || '', userid2: id2 || ''},
             autoLoad: true,
             autoDestroy: true,
             reader: myReader,
@@ -992,21 +992,31 @@ TT.app = function() {
 
         var toolbar = new Ext.Toolbar({
             items:[
-                { text:"记录比赛结果", handler: function() { editMatch(); } },
-                '-',
                 { text:"我的比赛", handler: function () { showMatches(currentUserID); } },
                 '-',
-                { text:"所有比赛", handler: function () { showMatches(); } },
-                '-',
                 { xtype: 'combo', name: 'useridfake', id: 'match_filter', allowBlank: true, editable: true, typeAhead: true,
-                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local', value: id || '所有比赛',
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local', value: id || '所有选手',
                   store: userList,
                   displayField: 'full_name', valueField: 'userid', listeners: {
                       select: function(combo, record, index) {
-                          showMatches(record.data.userid);
+                          showMatches(record.data.userid, id2);
                       }
                   },
                 },
+                { xtype: 'tbtext', text: ' VS ' },
+                { xtype: 'combo', name: 'userid2fake', id: 'match_filter2', allowBlank: true, editable: true, typeAhead: true,
+                  triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local', value: id2 || '所有选手',
+                  store: userList,
+                  displayField: 'full_name', valueField: 'userid', listeners: {
+                      select: function(combo, record, index) {
+                          showMatches(id, record.data.userid);
+                      }
+                  },
+                },
+                '-',
+                { text:"所有比赛", handler: function () { showMatches(); } },
+                '-',
+                { text:"记录比赛结果", handler: function() { editMatch(); } },
             ]
         });
         var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {

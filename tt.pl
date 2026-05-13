@@ -439,7 +439,8 @@ sub getMatch() {
 }
 
 sub getMatches($siries_id = undef, $stage = undef, $group_number = undef) {
-    my $id = lc(get_param('userid', ''));
+    my $id  = lc(get_param('userid',  ''));
+    my $id2 = lc(get_param('userid2', ''));
     my (@filters, @inputs) = ((), ());
     if ( defined $siries_id ) {
         push @filters, 'siries_id';
@@ -491,7 +492,14 @@ sub getMatches($siries_id = undef, $stage = undef, $group_number = undef) {
         $win{$match_id}->{games} = [ sort { $a->{game_number} <=> $b->{game_number} } $game->@* ];
     }
     @matches = sort { $b->{date} cmp $a->{date} || $b->{match_id} <=> $a->{match_id} } values %win;
-    @matches = grep { $_->{userid} eq $id || $_->{userid2} eq $id } @matches if $id;
+    if ( $id && $id2 ) {
+        @matches = grep { ($_->{userid} eq $id  && $_->{userid2} eq $id2) ||
+                          ($_->{userid} eq $id2 && $_->{userid2} eq $id ) } @matches;
+    } elsif ( $id ) {
+        @matches = grep { $_->{userid} eq $id  || $_->{userid2} eq $id  } @matches;
+    } elsif ( $id2 ) {
+        @matches = grep { $_->{userid} eq $id2 || $_->{userid2} eq $id2 } @matches;
+    }
     { success => !$db->{error}, matches => \@matches, msg => $db->{errstr} };
 }
 
