@@ -28,6 +28,19 @@ TT.app = function() {
     var listpanel;
     var msgpanel;
 
+    var savePage = function(page) {
+        Ext.util.Cookies.set('tt_last_page', page, new Date(new Date().getTime() + 365*24*60*60*1000));
+    };
+
+    var showSavedPage = function() {
+        var page = Ext.util.Cookies.get('tt_last_page') || 'point_list';
+        if      ( page === 'my_matches' ) showMatches(currentUserID);
+        else if ( page === 'matches'    ) showMatches();
+        else if ( page === 'series'     ) showSeries();
+        else if ( page === 'users'      ) showUsers();
+        else                              showPointList();
+    };
+
     Ext.QuickTips.init();
     Ext.form.Field.prototype.msgTarget = 'side';
 
@@ -391,6 +404,10 @@ TT.app = function() {
                     currentUserID = jsonData.user[0].userid;
                     logintype = jsonData.user[0].logintype;
                     changeTxt(jsonData.user[0]);
+                    if ( !showGeneralInfo._initialDone ) {
+                        showGeneralInfo._initialDone = true;
+                        showSavedPage();
+                    }
                 },
            failure: function () { changeTxt("Failed"); },
            params: { action: 'getGeneralInfo' }
@@ -565,7 +582,7 @@ TT.app = function() {
                 handler: function(){
                     fp.getForm().submit({
                         params: {action: 'editMatch'},
-                        success: function(...args) {results(...args); showGeneralInfo(); showMatches(); win.close();},
+                        success: function(...args) {results(...args); showGeneralInfo(); showSavedPage(); win.close();},
                         failure: results,
                     });
                 }
@@ -1364,19 +1381,19 @@ TT.app = function() {
                     handler: function () { editUserInfo(currentUserID); }
                 },{
                     text: '我的比赛',
-                    handler: function () { showMatches(currentUserID); }
+                    handler: function () { savePage('my_matches'); showMatches(currentUserID); }
                 },{
                     text: '积分概览',
-                    handler: function () { showPointList(); }
+                    handler: function () { savePage('point_list'); showPointList(); }
                 },{
                     text: '比赛结果',
-                    handler: function () { showMatches(); }
+                    handler: function () { savePage('matches'); showMatches(); }
                 },{
                     text: '系列赛事',
-                    handler: showSeries
+                    handler: function () { savePage('series'); showSeries(); }
                 },{
                     text: '所有用户',
-                    handler: function () { showUsers(); }
+                    handler: function () { savePage('users'); showUsers(); }
                 },{
                     text: '源代码库',
                     handler: function () { window.open('https://github.com/wangvisual/tt', '_blank'); },
@@ -1436,8 +1453,7 @@ TT.app = function() {
             Ext.QuickTips.init();
             logpanel.log("OK.");
             msgpanel.msg("Ready.");
-            showGeneralInfo();
-            showPointList();
+            showGeneralInfo(); // navigates to last visited page after login info loads
         }
     };
 }();
