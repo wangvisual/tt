@@ -1204,8 +1204,8 @@ TT.app = function() {
             myds.on('load', function(store) {
                 var pointChanges = store.reader.jsonData.point_changes || [];
                 var pointStore = new Ext.data.ArrayStore({
-                    fields: ['full_name', 'current_point', 'change', 'matches', 'details'],
-                    data: pointChanges.map(function(r) { return [r.full_name, r.current_point, r.change, r.matches, r.details]; }),
+                    fields: ['full_name', 'pre_point', 'current_point', 'change', 'matches', 'details'],
+                    data: pointChanges.map(function(r) { return [r.full_name, r.pre_point, r.current_point, r.change, r.matches, r.details]; }),
                 });
                 var pointGrid = new Ext.grid.GridPanel({
                     id: content_id + '_points',
@@ -1214,6 +1214,7 @@ TT.app = function() {
                     columns: [
                         new Ext.grid.RowNumberer({width: 30}),
                         {header: '选手', dataIndex: 'full_name', width: 200},
+                        {header: '赛前积分', dataIndex: 'pre_point', width: 80},
                         {header: '当前积分', dataIndex: 'current_point', width: 80},
                         {header: '积分变化', dataIndex: 'change', width: 80},
                         {header: '场数', dataIndex: 'matches', width: 50},

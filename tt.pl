@@ -730,6 +730,15 @@ sub getSeriesMatchChallengeView($matches, $users) {
         $user_points{$uid2}{change}    += $delta2;
         $user_points{$uid1}{matches}   += 1;
         $user_points{$uid2}{matches}   += 1;
+        # Track pre-series point from the earliest match (lowest match_id)
+        if ( !defined $user_points{$uid1}{first_match_id} || $m->{match_id} < $user_points{$uid1}{first_match_id} ) {
+            $user_points{$uid1}{first_match_id} = $m->{match_id};
+            $user_points{$uid1}{pre_point}      = $m->{point_before};
+        }
+        if ( !defined $user_points{$uid2}{first_match_id} || $m->{match_id} < $user_points{$uid2}{first_match_id} ) {
+            $user_points{$uid2}{first_match_id} = $m->{match_id};
+            $user_points{$uid2}{pre_point}      = $m->{point_before2};
+        }
         $user_points{$uid1}{vs}{$uid2}{cn_name} //= $cn2;
         $user_points{$uid1}{vs}{$uid2}{change}  += $delta1;
         $user_points{$uid2}{vs}{$uid1}{cn_name} //= $cn1;
@@ -739,7 +748,8 @@ sub getSeriesMatchChallengeView($matches, $users) {
         my ($uid, $up) = ($_, $user_points{$_});
         my $details = join ', ', map {; "$_->{cn_name}: " . ($_->{change} >= 0 ? "+$_->{change}" : "$_->{change}") }
                       sort { $b->{change} <=> $a->{change} } values %{$up->{vs}};
-        { userid => $uid, full_name => $up->{full_name}, current_point => $name{$uid}{point},
+        { userid => $uid, full_name => $up->{full_name}, pre_point => $up->{pre_point},
+          current_point => $name{$uid}{point},
           change => $up->{change}, matches => $up->{matches}, details => $details }
     } sort { $user_points{$b}{change} <=> $user_points{$a}{change} } keys %user_points ];
 
