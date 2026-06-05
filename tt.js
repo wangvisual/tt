@@ -404,6 +404,8 @@ TT.app = function() {
                     currentUserID = jsonData.user[0].userid;
                     logintype = jsonData.user[0].logintype;
                     changeTxt(jsonData.user[0]);
+                    var btn = Ext.getCmp('btn_edit_content');
+                    if ( btn ) { logintype === 0 ? btn.show() : btn.hide(); }
                     if ( !showGeneralInfo._initialDone ) {
                         showGeneralInfo._initialDone = true;
                         showSavedPage();
@@ -411,6 +413,79 @@ TT.app = function() {
                 },
            failure: function () { changeTxt("Failed"); },
            params: { action: 'getGeneralInfo' }
+        });
+    };
+
+    var editContent = function(name) {
+        Ext.Ajax.request({
+            url: tturl,
+            method: 'POST',
+            params: {action: 'getContent', name: name},
+            success: function(response) {
+                var data = Ext.util.JSON.decode(response.responseText);
+                if ( !data.success ) { Ext.Msg.alert('错误', data.msg); return; }
+                var history = data.content || [];
+                var current = history.length ? history[0].content : '';
+
+                var historyStore = new Ext.data.ArrayStore({
+                    fields: ['version', 'updated_by', 'updated_at', 'content'],
+                    data: history.map(function(r) { return [r.version, r.updated_by, r.updated_at, r.content]; }),
+                });
+                var historyGrid = new Ext.grid.GridPanel({
+                    title: '历史版本',
+                    store: historyStore,
+                    height: 150,
+                    columns: [
+                        {header: '版本', dataIndex: 'version', width: 50},
+                        {header: '修改人', dataIndex: 'updated_by', width: 120},
+                        {header: '时间', dataIndex: 'updated_at', width: 140},
+                    ],
+                    listeners: {
+                        rowclick: function(grid, rowIndex) {
+                            var rec = grid.getStore().getAt(rowIndex);
+                            ta.setValue(rec.get('content'));
+                        }
+                    },
+                });
+                var ta = new Ext.form.TextArea({
+                    fieldLabel: '内容',
+                    name: 'content',
+                    height: 400,
+                    anchor: '100%',
+                });
+                ta.setValue(current);
+                var win = new Ext.Window({
+                    title: '编辑信息: ' + name,
+                    width: 800,
+                    height: 620,
+                    modal: true,
+                    layout: 'fit',
+                    items: [new Ext.Panel({
+                        layout: 'anchor',
+                        bodyStyle: 'padding:5px',
+                        items: [historyGrid, ta],
+                    })],
+                    buttons: [{
+                        text: '保存',
+                        handler: function() {
+                            Ext.Ajax.request({
+                                url: tturl,
+                                method: 'POST',
+                                params: {action: 'editContent', name: name, content: ta.getValue()},
+                                success: function(r) {
+                                    var d = Ext.util.JSON.decode(r.responseText);
+                                    if ( d.success ) { win.close(); }
+                                    else { Ext.Msg.alert('错误', d.msg); }
+                                },
+                            });
+                        }
+                    },{
+                        text: '取消',
+                        handler: function() { win.close(); }
+                    }],
+                });
+                win.show();
+            },
         });
     };
 
@@ -1398,6 +1473,11 @@ TT.app = function() {
                 },{
                     text: '源代码库',
                     handler: function () { window.open('https://github.com/wangvisual/tt', '_blank'); },
+                },{
+                    text: '编辑信息',
+                    hidden: logintype != 0,
+                    id: 'btn_edit_content',
+                    handler: function () { editContent('more.js'); }
                 }]
             });
 

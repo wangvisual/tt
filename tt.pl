@@ -1135,10 +1135,48 @@ sub replay() {
     }
 }
 
+sub getContent() {
+    my $name = get_param('name', '');
+    return { success=>0, msg=>'name required' } if !$name;
+    my @rows = $db->exec('SELECT version, content, updated_by, updated_at FROM CONTENT WHERE name=? ORDER BY version DESC;', [$name], 1);
+    return { success=>0, msg=>$db->{errstr} } if $db->{error};
+    return { success=>1, content => \@rows };
+}
+
+sub editContent() {
+    return { success=>0, msg=>'只有管理员可以编辑内容' } if !isAdmin($userid);
+    my $name    = get_param('name', '');
+    my $content = get_param('content', '');
+    return { success=>0, msg=>'name required' } if !$name;
+    my @rows = $db->exec('SELECT MAX(version) as v FROM CONTENT WHERE name=?;', [$name], 1);
+    my $next_version = ( $rows[0]{v} // 0 ) + 1;
+    $db->exec('INSERT INTO CONTENT(name, version, content, updated_by) VALUES(?,?,?,?);',
+              [$name, $next_version, $content, $userid], 0);
+    return { success=>0, msg=>$db->{errstr} } if $db->{error};
+    return { success=>1, version=>$next_version };
+}
+
+sub _get_content_latest($name, $fallback_file) {
+    my @rows = $db->exec('SELECT content FROM CONTENT WHERE name=? ORDER BY version DESC LIMIT 1;', [$name], 1);
+    return $rows[0]{content} if @rows;
+    # seed from file on first use
+    if ( -f "$RealBin/$fallback_file" ) {
+        open my $fh, '<:encoding(UTF-8)', "$RealBin/$fallback_file" or return '';
+        my $content = do { local $/; <$fh> };
+        close $fh;
+        $db->exec('INSERT INTO CONTENT(name, version, content, updated_by) VALUES(?,?,?,?);',
+                  [$name, 1, $content, 'system'], 0);
+        return $content;
+    }
+    return '';
+}
+
 sub printheader($q) {
     print $q->header( -charset=>'utf-8',
                       -expires=>'now',
                     );
+    my @ver = $db->exec('SELECT MAX(version) as v FROM CONTENT WHERE name=?;', ['more.js'], 1);
+    my $more_js_ver = $ver[0]{v} // 0;
     my $js_settings = "var title = '$settings::title';\nvar extjs_root = '$extjs';\nvar avatar_template = '$settings::avatar_template';\n" .
                       "var debug=$settings::debug;\nvar more='';\n";
     my $tt_js_time = stat("$RealBin/tt.js")->mtime;
@@ -1158,7 +1196,7 @@ sub printheader($q) {
                                    {-src=>"$echarts/echarts" . ( $settings::debug ? "" : ".min" ) . ".js"},
                                    {-src=>$settings::debug ? 'https://cdn.jsdelivr.net/npm/jquery-bracket/src/jquery.bracket.js' : "$bracket/jquery.bracket.min.js"},
                                    {-code=>$js_settings},
-                                   {-src=>'more.js'},
+                                   {-src=>"?action=getJS&name=more.js&v=$more_js_ver"},
                                    {-src=>"DynaGrid.js"},
                                    {-src=>"tt.js?$tt_js_time"},
                                   ],
@@ -1183,8 +1221,17 @@ sub main() {
     check_server($q);
     $db = db->new();
     my $action = get_param('action', '');
+    # Serve raw JS content from DB (no escaping needed, browser loads it like a static file)
+    if ( $action eq 'getJS' ) {
+        my $name = get_param('name', '');
+        my $content = _get_content_latest($name, $name);
+        print "Content-Type: text/javascript; charset=utf-8\n\n";
+        print $content;
+        $db->disconnect();
+        exit 0;
+    }
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
-        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers);
+        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers getContent editContent);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
