@@ -849,8 +849,15 @@ sub editSeries() {
     eval {
         $db->{dbh}->begin_work;
         if ( $siries_id > 0 ) {
-            my @old_stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
+            my @old_stage = $db->exec('SELECT stage, type from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
             my $old = ( !$db->{err} && scalar @old_stage == 1 && defined $old_stage[0]->{stage} ) ? $old_stage[0]->{stage} : -1;
+            my $old_type = @old_stage ? ( $old_stage[0]->{type} // 'normal' ) : 'normal';
+            if ( $old_type ne $type ) {
+                my @matches = $db->exec('SELECT count(*) AS cnt FROM MATCHES WHERE siries_id=?;', [$siries_id], 1, 0);
+                if ( $matches[0]->{cnt} > 0 ) {
+                    die "has_matches\n";
+                }
+            }
             $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=?,links=?,type=? where siries_id=?;',
                       [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links, $type, $siries_id], 0, 0);
             $need_capture &&= ( $old < $stage ) ? 1 : 0; # eg, 报名结束，进入循环赛
@@ -882,12 +889,14 @@ sub editSeries() {
         $db->{dbh}->commit();
     };
     my $success = !$db->{err};
+    my $msg = $db->{errstr};
     if ($@) {
         $db->{dbh}->rollback();
         $success = 0;
+        $msg = $@ eq "has_matches\n" ? "已有比赛记录，不允许修改赛事类型" : $@;
     }
 
-    { success => $success, msg => $db->{errstr} };
+    { success => $success, msg => $msg };
 }
 
 sub getSeries() {
