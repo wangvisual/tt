@@ -295,6 +295,9 @@ TT.app = function() {
                     success: function() {
                         var isFree = Ext.getCmp('edittypecombo').getValue() === 'free';
                         stageStore.loadData(isFree ? freeStageTypes : normalStageTypes);
+                        // Re-set the stage value so the combo can match against the updated store
+                        var stageCombo = Ext.getCmp('editstagecombo');
+                        stageCombo.setValue(stageCombo.getValue());
                     },
                 });
             }
