@@ -33,7 +33,7 @@ sub new($proto, $dbname = undef) {
     $dbh->do("PRAGMA locking_mode = NORMAL");
     $dbh->do("PRAGMA page_size = 4096");
     $self->init_db() if !$dbfile_exists;
-    #$self->upgrade_db();
+    $self->upgrade_db();
 
     return $self;
 }
