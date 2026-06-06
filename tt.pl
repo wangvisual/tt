@@ -763,13 +763,15 @@ sub getSeriesMatch() {
     my $group_number = get_param('group_number') || 1;
     my @userids = $db->exec('SELECT userid from SERIES_USERS WHERE siries_id=? AND stage=? AND group_number=?;', [$siries_id, $stage, $group_number], 1, 0);
     return { success=>0, msg=> $db->{errstr} } if $db->{err};
+    my @ser = $db->exec('SELECT type FROM SERIES WHERE siries_id=?;', [$siries_id], 1);
+    my $is_free = @ser && ($ser[0]{type} // '') eq 'free';
     my $data = getMatches($siries_id, $stage, $group_number);
     return $data if !$data->{success};
     my $userlist = getUserList();
     return $userlist if !$userlist->{success};
     my $matches = $data->{matches}; # [ { userid, userid2, win, lose, waive, games => [win, lose, game_number, game_id, userid] }, ... ]
     return getSeriesMatchBracket($matches, \@userids, $userlist) if $stage == 2;
-    return getSeriesMatchChallengeView($matches, $userlist) if $stage == 3;
+    return getSeriesMatchChallengeView($matches, $userlist) if $stage == 3 || $is_free;
     my %name;
     foreach ( $userlist->{users}->@* ) {
         $name{$_->{userid}} = $_->{cn_name};
@@ -828,6 +830,8 @@ sub editSeries() {
     my $top_n = get_param('top_n') || 1;
     my $stage = get_param('stage') || 0;
     my $links = get_param('links', '');
+    my $type  = get_param('type', 'normal');
+    $type = 'normal' if $type ne 'free' && $type ne 'normal';
     my $date;
     foreach my $s ( keys $stage_name->%* ) {
         $date->{"start_$s"} = get_param("start_$s", '');
@@ -835,6 +839,11 @@ sub editSeries() {
     }
 
     return { success=>0, msg=>"输入值不对" } if $number_of_groups < 0 || $group_outlets < 0 || $top_n < 0 || $stage < 0 || $stage > STAGE_END;
+    if ( $type eq 'free' ) {
+        return { success=>0, msg=>"自由赛类型只允许自由赛阶段或者结束" } if $stage != 3 && $stage != STAGE_END;
+    } else {
+        return { success=>0, msg=>"普通赛事不允许自由赛阶段" } if $stage == 3;
+    }
 
     my $need_capture = ( $stage > 0 && $stage < STAGE_END ) ? 1 : 0; # 比赛开始或者进入下个阶段
     eval {
@@ -842,12 +851,12 @@ sub editSeries() {
         if ( $siries_id > 0 ) {
             my @old_stage = $db->exec('SELECT stage from SERIES WHERE siries_id=?;', [$siries_id], 1, 0);
             my $old = ( !$db->{err} && scalar @old_stage == 1 && defined $old_stage[0]->{stage} ) ? $old_stage[0]->{stage} : -1;
-            $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=?,links=? where siries_id=?;',
-                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links, $siries_id], 0, 0);
+            $db->exec('UPDATE SERIES set siries_name=?,number_of_groups=?,group_outlets=?,top_n=?,stage=?,links=?,type=? where siries_id=?;',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links, $type, $siries_id], 0, 0);
             $need_capture &&= ( $old < $stage ) ? 1 : 0; # eg, 报名结束，进入循环赛
         } else {
-            $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage,links) VALUES(?,?,?,?,?,?);',
-                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links], 2, 0);
+            $db->exec('INSERT INTO SERIES(siries_name,number_of_groups,group_outlets,top_n,stage,links,type) VALUES(?,?,?,?,?,?,?);',
+                      [$siries_name, $number_of_groups, $group_outlets, $top_n, $stage, $links, $type], 2, 0);
             $siries_id = $db->{last_insert_id};
         }
         foreach my $s ( keys $stage_name->%* ) {
@@ -885,7 +894,7 @@ sub getSeries() {
     my $siries_id = get_param('siries_id') || -1;
     my $ongoing = get_param('filter', '') eq 'ongoing' ? 1 : 0;
     my @series;
-    my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links FROM SERIES';
+    my $base = 'SELECT siries_id, siries_name, number_of_groups, group_outlets, top_n, stage, links, type FROM SERIES';
     if ( $siries_id > 0 ) { # 编辑系列赛
         @series = $db->exec("$base WHERE siries_id=?;", [$siries_id], 1);
         getSeriesDate(\@series);
@@ -1104,8 +1113,8 @@ sub replay() {
             [@{$u}{qw(userid name email employeeNumber logintype gender nick_name cn_name)}, $points_latest{$u->{userid}}], 0 );
     }
     foreach my $s (@series) {
-        $new_db->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,links,stage) VALUES(?,?,?,?,?,?,?) ON CONFLICT(siries_id) DO NOTHING;",
-            [@{$s}{qw(siries_id siries_name number_of_groups group_outlets top_n links stage)}], 0 );
+        $new_db->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,links,stage,type) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(siries_id) DO NOTHING;",
+            [@{$s}{qw(siries_id siries_name number_of_groups group_outlets top_n links stage type)}], 0 );
     }
     foreach my $m (@new_matches) {
         $new_db->exec("INSERT INTO MATCHES(match_id,siries_id,stage,group_number,date,comment) VALUES(?,?,?,?,?,?) ON CONFLICT(match_id) DO NOTHING;",

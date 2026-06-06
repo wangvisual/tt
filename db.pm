@@ -56,7 +56,8 @@ sub init_db($self) {
     $dbh->do("CREATE TABLE IF NOT EXISTS GAMES (game_id INTEGER PRIMARY KEY ASC, match_id INTEGER, game_number INTEGER NOT NULL, userid NOT NULL, win INTEGER NOT NULL, lose INTEGER NOT NULL)");
     # stage: 0 => enroll, 1 => 循环赛 ...
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES (siries_id INTEGER PRIMARY KEY ASC, siries_name NOT NULL, number_of_groups INTEGER NOT NULL DEFAULT 1,"
-           . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0, links)");
+           . "group_outlets INTEGER NOT NULL DEFAULT 1, top_n INTEGER NOT NULL DEFAULT 1, stage INTEGER NOT NULL DEFAULT 0, links,"
+           . "type TEXT NOT NULL DEFAULT 'normal')");
     # When a siries changed from enroll to competition, or 循环赛=>淘汰赛, capture(update) the point snapshot into SERIES_USERS
     # If the siries never end(eg, 自由约战) or still in enroll stage, use point from USERS table as fallback when calc point
     # 报名: 1, 0, usera, 1600, null
@@ -64,14 +65,20 @@ sub init_db($self) {
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 1, PRIMARY KEY (siries_id, stage, userid))");
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_DATE(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, start TEXT, end TEXT, PRIMARY KEY (siries_id, stage))");
     $dbh->do("CREATE TABLE IF NOT EXISTS CONTENT (name NOT NULL, version INTEGER NOT NULL, content TEXT NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (name, version))");
-    $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage) VALUES(?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3], 0 );
+    $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage,type) VALUES(?,?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3, 'free'], 0 );
     $self->exec("INSERT INTO SERIES_DATE(siries_id, stage, start) VALUES(?,?,?);", [1, 3, '2019-08-01'], 0 );
-    $dbh->do("PRAGMA user_version = 1");
+    $dbh->do("PRAGMA user_version = 2");
 }
 
 sub upgrade_db($self) {
     my $dbh = $self->{dbh};
     my $user_version = $dbh->selectall_arrayref("PRAGMA user_version")->[0]->[0];
+    if ( $user_version < 2 ) {
+        $dbh->do("CREATE TABLE IF NOT EXISTS CONTENT (name NOT NULL, version INTEGER NOT NULL, content TEXT NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (name, version))");
+        $dbh->do("ALTER TABLE SERIES ADD COLUMN type TEXT NOT NULL DEFAULT 'normal'");
+        $dbh->do("UPDATE SERIES SET type='free' WHERE stage=3 OR siries_id=1");
+        $dbh->do("PRAGMA user_version = 2");
+    }
 }
 
 sub DESTROY {

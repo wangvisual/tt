@@ -289,21 +289,45 @@ TT.app = function() {
 
         function reloadUserPanel(p){
             if (typeof(siries_id) != 'undefined' && siries_id != '') {
-                p.form.load({params: {action: 'getSeries', siries_id: siries_id}, waitMsg: 'Loading...' });
+                p.form.load({
+                    params: {action: 'getSeries', siries_id: siries_id},
+                    waitMsg: 'Loading...',
+                    success: function() {
+                        var isFree = Ext.getCmp('edittypecombo').getValue() === 'free';
+                        stageStore.loadData(isFree ? freeStageTypes : normalStageTypes);
+                    },
+                });
             }
         }
+
+        var freeStageTypes   = stageTypes.filter(function(e) { return e[0] == 3 || e[0] == 100; });
+        var normalStageTypes = stageTypes.filter(function(e) { return e[0] != 3; });
+
+        var stageStore = new Ext.data.SimpleStore({ fields: ['id', 'type'], data: normalStageTypes });
+
+        var typeCombo = { fieldLabel: '类型', xtype: 'combo', id: 'edittypecombo', name: 'typefake', allowBlank: false, editable: false,
+            triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
+            store: new Ext.data.SimpleStore({ fields: ['id', 'label'], data: [['normal', '普通赛'], ['free', '自由赛/挑战赛']] }),
+            displayField: 'label', valueField: 'id', hiddenName: 'type', value: 'normal',
+            listeners: {
+                select: function(combo, record) {
+                    var isFree = record.get('id') === 'free';
+                    stageStore.loadData(isFree ? freeStageTypes : normalStageTypes);
+                    Ext.getCmp('editstagecombo').setValue(isFree ? 3 : 0);
+                }
+            },
+        };
 
         var items = [
             { fieldLabel: 'ID', xtype: 'hidden', name: 'siries_id', id: 'editsiriesid', allowBlank: false, readOnly: true },
             { fieldLabel: '系列赛名字', width: 450, name: 'siries_name', allowBlank: false },
+            typeCombo,
             { fieldLabel: '小组数', name: 'number_of_groups', value: 1, allowBlank: true },
             { fieldLabel: '小组出线', name: 'group_outlets', value: 1, allowBlank: true },
             { fieldLabel: '决出几名', name: 'top_n', value: 1, allowBlank: true },
             { fieldLabel: '阶段', xtype: 'combo', id: 'editstagecombo', name: 'stagefake', allowBlank: false, editable: false, typeAhead: false,
               triggerAction: 'all', lazyInit: true, lazyRender: false, mode: 'local',
-              store: new Ext.data.SimpleStore({
-                     fields:['id', 'type']
-                    ,data:stageTypes}),
+              store: stageStore,
               displayField: 'type', valueField: 'id', hiddenName: 'stage', value: 0,
             },
             { fieldLabel: '外部链接', width: 450, xtype: 'textarea', name: 'links', allowBlank: true },
@@ -331,6 +355,7 @@ TT.app = function() {
                 {name: 'siries_id', type: 'int'},
                 {name: 'siries_name', type: 'string'},
                 {name: 'links', type: 'string'},
+                {name: 'type', type: 'string'},
                 {name: 'number_of_groups', type: 'int'},
                 {name: 'group_outlets', type: 'int'},
                 {name: 'top_n', type: 'int'},
@@ -898,6 +923,7 @@ TT.app = function() {
             {name: 'siries_id', type: 'int', sortDir: 'ASC'},
             {name: 'siries_name'},
             {name: 'links'},
+            {name: 'type'},
             {name: 'number_of_groups', type: 'int'},
             {name: 'group_outlets', type: 'int'},
             {name: 'top_n', type: 'int'},
@@ -943,7 +969,7 @@ TT.app = function() {
             }}]},
             {xtype: 'actioncolumn', header: '结果', items: [{icon: 'etc/cup.png', tooltip: '显示比赛结果', handler: function(g, rowIndex) {
                 var record = g.getStore().getAt(rowIndex);
-                showSeriesMatchGroups(record.get('siries_id'), record.get('siries_name'));
+                showSeriesMatchGroups(record.get('siries_id'), record.get('siries_name'), record.get('type') === 'free');
             }}]},
             {header: '开始日期', sortable: true, dataIndex: 'start'},
             {header: '结束日期', sortable: true, dataIndex: 'end'},
@@ -1205,7 +1231,7 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
-    var showSeriesMatchGroups = function(siries_id, siries_name) {
+    var showSeriesMatchGroups = function(siries_id, siries_name, is_free) {
         var myds = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
@@ -1216,13 +1242,13 @@ TT.app = function() {
             fields: ['siries_id', 'stage', 'group_number'],
             listeners: {
                 load: function(store, records, options ) {
-                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number')) );
+                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free) );
                     listpanel.doLayout();
                 },
             },
         });
     };
-    var showSeriesMatch = function(siries_id, siries_name, stage, group_number) {
+    var showSeriesMatch = function(siries_id, siries_name, stage, group_number, is_free) {
         var content_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
         listpanel.remove(content_id);
         var title = siries_name + ' ' + renderStage(stage) + ' 第' + group_number + '组 结果';
@@ -1258,7 +1284,7 @@ TT.app = function() {
                 return value.value;
             },
         };
-        if ( stage == 3 ) {
+        if ( is_free ) {
             // Challenge view: matches table + point-changes summary table
             var matchGrid = new Ext.ux.DynamicGridPanel({
                 id: content_id + '_matches',
