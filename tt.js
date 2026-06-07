@@ -34,8 +34,7 @@ TT.app = function() {
 
     var showSavedPage = function() {
         var page = Ext.util.Cookies.get('tt_last_page') || 'point_list';
-        if      ( page === 'my_matches' ) showMatches(currentUserID);
-        else if ( page === 'matches'    ) showMatches();
+        if      ( page === 'matches'    ) showMatches();
         else if ( page === 'series'     ) showSeries();
         else if ( page === 'users'      ) showUsers();
         else if ( page === 'votes'      ) showVoteEvents();
@@ -1887,9 +1886,6 @@ TT.app = function() {
                 items: [{
                     text: '我的信息',
                     handler: function () { editUserInfo(currentUserID); }
-                },{
-                    text: '我的比赛',
-                    handler: function () { savePage('my_matches'); showMatches(currentUserID); }
                 },{
                     text: '积分概览',
                     handler: function () { savePage('point_list'); showPointList(); }
