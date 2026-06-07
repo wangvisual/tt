@@ -38,6 +38,7 @@ TT.app = function() {
         else if ( page === 'matches'    ) showMatches();
         else if ( page === 'series'     ) showSeries();
         else if ( page === 'users'      ) showUsers();
+        else if ( page === 'votes'      ) showVoteEvents();
         else                              showPointList();
     };
 
@@ -1031,6 +1032,408 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
+    var showVoteEvents = function() {
+        var eventRecord = Ext.data.Record.create([
+            {name: 'event_id',      type: 'int'},
+            {name: 'event_name'},
+            {name: 'event_type'},
+            {name: 'start_time'},
+            {name: 'end_time'},
+            {name: 'person_count',  type: 'int'},
+            {name: 'votes_per_user',type: 'int'},
+            {name: 'male_score',    type: 'float'},
+            {name: 'female_score',  type: 'float'},
+            {name: 'siries_id',     type: 'int'},
+            {name: 'siries_name'},
+            {name: 'entry_count',   type: 'int'},
+        ]);
+        var eventDs = new Ext.data.Store({
+            proxy: new Ext.data.HttpProxy({url: tturl, method: 'POST'}),
+            baseParams: {action: 'getVoteEvents'},
+            autoLoad: true,
+            autoDestroy: true,
+            reader: new Ext.data.JsonReader({root: 'events', id: 'event_id'}, eventRecord),
+        });
+
+        var voteTypeRenderer = function(v) { return v === 'enroll' ? '报名' : '投票'; };
+        var statusRenderer = function(v, m, record) {
+            var now = new Date();
+            var start = record.get('start_time') ? new Date(record.get('start_time')) : null;
+            var end   = record.get('end_time')   ? new Date(record.get('end_time'))   : null;
+            if ( end && now > end ) return '<span style="color:gray">已结束</span>';
+            if ( start && now < start ) return '<span style="color:orange">未开始</span>';
+            return '<span style="color:green">进行中</span>';
+        };
+
+        var eventCm = new Ext.grid.ColumnModel([
+            {header: 'ID',       width: 40,  dataIndex: 'event_id',       sortable: true},
+            {header: '名称',     width: 200, dataIndex: 'event_name',     sortable: true},
+            {header: '类型',     width: 60,  dataIndex: 'event_type',     sortable: true, renderer: voteTypeRenderer},
+            {header: '状态',     width: 60,  dataIndex: 'end_time',       renderer: statusRenderer},
+            {header: '开始',     width: 130, dataIndex: 'start_time',     sortable: true},
+            {header: '结束',     width: 130, dataIndex: 'end_time',       sortable: true},
+            {header: '每行人数', width: 70,  dataIndex: 'person_count',   sortable: true},
+            {header: '可投票数', width: 70,  dataIndex: 'votes_per_user', sortable: true},
+            {header: '男生分值', width: 70,  dataIndex: 'male_score',     sortable: true},
+            {header: '女生分值', width: 70,  dataIndex: 'female_score',   sortable: true},
+            {header: '关联赛事', width: 120, dataIndex: 'siries_name',    sortable: true},
+            {header: '条目数',   width: 60,  dataIndex: 'entry_count',    sortable: true},
+        ]);
+
+        var entriesPanel = new Ext.Panel({
+            border: false,
+            autoHeight: true,
+        });
+
+        var eventGrid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
+            ds: eventDs,
+            cm: eventCm,
+            title: '报名/投票项目',
+            id: 'voteeventlist',
+            tbar: new Ext.Toolbar({items: [
+                { text: '新建项目', handler: function() { editVoteEvent(null, eventDs); } },
+                '-',
+                { text: '删除选中项目', hidden: logintype != 0, handler: function() {
+                    var sel = eventGrid.getSelectionModel().getSelected();
+                    if ( !sel ) { Ext.Msg.alert('提示', '请先选中一个项目'); return; }
+                    Ext.Msg.confirm('确认删除', '确定删除项目 "' + sel.get('event_name') + '"？（候选和投票记录也将一并删除）', function(btn) {
+                        if ( btn !== 'yes' ) return;
+                        Ext.Ajax.request({
+                            url: tturl, method: 'POST',
+                            params: {action: 'deleteVoteEvent', event_id: sel.get('event_id')},
+                            success: function(r) {
+                                var d = Ext.util.JSON.decode(r.responseText);
+                                if ( d.success ) { eventDs.reload(); entriesPanel.removeAll(true); entriesPanel.doLayout(); }
+                                else { Ext.Msg.alert('错误', d.msg); }
+                            },
+                        });
+                    });
+                }},
+            ]}),
+            listeners: {
+                rowclick: function(g, rowIndex) {
+                    var record = g.getStore().getAt(rowIndex);
+                    showVoteEntries(record.data, entriesPanel, eventDs);
+                },
+                rowdblclick: function(g, rowIndex) {
+                    editVoteEvent(g.getStore().getAt(rowIndex).data, eventDs);
+                },
+            },
+        }));
+
+        listpanel.removeAll(true);
+        listpanel.add(eventGrid);
+        listpanel.add(entriesPanel);
+        listpanel.doLayout();
+    };
+
+    var editVoteEvent = function(eventData, eventDs) {
+        var isNew = !eventData || !eventData.event_id;
+        var seriesStore = new Ext.data.JsonStore({
+            url: tturl, method: 'POST',
+            baseParams: {action: 'getSeries'},
+            autoLoad: true, autoDestroy: true,
+            root: 'series', fields: ['siries_id', 'siries_name'],
+        });
+
+        var fp = new Ext.FormPanel({
+            url: tturl, method: 'POST',
+            frame: true, labelWidth: 80, labelAlign: 'right',
+            defaultType: 'textfield',
+            items: [
+                { fieldLabel: '名称', name: 'event_name', allowBlank: false,
+                  value: isNew ? '' : eventData.event_name },
+                { fieldLabel: '类型', xtype: 'combo', name: 'event_type_fake', hiddenName: 'event_type',
+                  triggerAction: 'all', editable: false, mode: 'local',
+                  store: new Ext.data.SimpleStore({fields:['id','name'], data:[['vote','投票'],['enroll','报名']]}),
+                  displayField: 'name', valueField: 'id',
+                  value: isNew ? 'vote' : eventData.event_type },
+                { fieldLabel: '开始时间', name: 'start_time', xtype: 'datefield',
+                  format: 'Y-m-d', value: isNew ? '' : eventData.start_time },
+                { fieldLabel: '结束时间', name: 'end_time', xtype: 'datefield',
+                  format: 'Y-m-d', value: isNew ? '' : eventData.end_time },
+                { fieldLabel: '每行人数', name: 'person_count', xtype: 'numberfield',
+                  minValue: 1, maxValue: 2, value: isNew ? 1 : eventData.person_count },
+                { fieldLabel: '可投票数', name: 'votes_per_user', xtype: 'numberfield',
+                  minValue: 1, value: isNew ? 1 : eventData.votes_per_user },
+                { fieldLabel: '男生分值', name: 'male_score', xtype: 'numberfield',
+                  value: isNew ? 1 : eventData.male_score },
+                { fieldLabel: '女生分值', name: 'female_score', xtype: 'numberfield',
+                  value: isNew ? 1 : eventData.female_score },
+                { fieldLabel: '关联赛事', xtype: 'combo', name: 'siries_id_fake', hiddenName: 'siries_id',
+                  triggerAction: 'all', editable: false, mode: 'local',
+                  store: seriesStore, displayField: 'siries_name', valueField: 'siries_id',
+                  listeners: { afterrender: function(c) {
+                      seriesStore.on('load', function() {
+                          if ( !isNew && eventData.siries_id ) c.setValue(eventData.siries_id);
+                      });
+                  }},
+                },
+            ],
+            buttons: [{
+                text: '保存',
+                handler: function() {
+                    fp.getForm().submit({
+                        params: { action: 'editVoteEvent', event_id: isNew ? -1 : eventData.event_id },
+                        success: function(f, a) {
+                            win.close();
+                            if ( eventDs ) eventDs.reload();
+                        },
+                        failure: function(f, a) { Ext.Msg.alert('错误', a.result ? a.result.msg : '保存失败'); },
+                    });
+                }
+            },{ text: '取消', handler: function() { win.close(); } }],
+        });
+
+        var win = new Ext.Window({
+            title: isNew ? '新建报名/投票项目' : '编辑: ' + eventData.event_name,
+            width: 380, modal: true, autoHeight: true, items: [fp],
+        });
+        win.show();
+    };
+
+    var showVoteEntries = function(eventData, container, eventDs) {
+        var event_id    = eventData.event_id;
+        var person_count = eventData.person_count;
+        var isEnded = eventData.end_time && new Date(eventData.end_time) < new Date();
+
+        var entryRecord = Ext.data.Record.create([
+            {name: 'entry_id',  type: 'int'},
+            {name: 'userid1'}, {name: 'userid2'},
+            {name: 'cn_name1'},{name: 'cn_name2'},
+            {name: 'gender1'}, {name: 'gender2'},
+            {name: 'emp1',     type: 'int'},
+            {name: 'emp2',     type: 'int'},
+            {name: 'score',    type: 'float'},
+            {name: 'count',    type: 'int'},
+            {name: 'my_vote',  type: 'int'},
+            {name: 'voters'},
+        ]);
+        var entryDs = new Ext.data.Store({
+            proxy: new Ext.data.HttpProxy({url: tturl, method: 'POST'}),
+            baseParams: {action: 'getVoteEntries', event_id: event_id},
+            autoLoad: true, autoDestroy: true,
+            reader: new Ext.data.JsonReader({root: 'entries', id: 'entry_id'}, entryRecord),
+        });
+
+        var votersRenderer = function(v, m, record) {
+            var voters = record.get('voters') || [];
+            if ( !voters.length ) return '';
+            return voters.map(function(u) {
+                var img = getAvatar(u);
+                return "<span class='avatar'><img height='14' src='" + img + "'/>"
+                     + "<span><img height='100' src='" + img + "'/><br/>" + Ext.util.Format.htmlEncode(u.cn_name) + "</span></span>";
+            }).join(' ');
+        };
+
+        var voteIconRenderer = function(v, m, record) {
+            if ( isEnded ) return '';
+            return record.get('my_vote')
+                ? "<img src='etc/enroll.png' style='cursor:pointer;opacity:1' title='已投票，点击取消'/>"
+                : "<img src='etc/enroll.png' style='cursor:pointer;opacity:0.3' title='点击投票'/>";
+        };
+
+        var nameHeader = person_count == 1 ? '选手' : '选手1 / 选手2';
+        var nameRenderer = function(v, m, record) {
+            var n1 = record.get('cn_name1') || record.get('userid1');
+            var n2 = record.get('cn_name2') || record.get('userid2');
+            return person_count == 1 ? Ext.util.Format.htmlEncode(n1)
+                 : Ext.util.Format.htmlEncode(n1) + ' / ' + Ext.util.Format.htmlEncode(n2 || '');
+        };
+
+        var isVote = eventData.event_type !== 'enroll';
+
+        var cm = new Ext.grid.ColumnModel([
+            new Ext.grid.RowNumberer(),
+            {header: nameHeader, width: 160, dataIndex: 'cn_name1', renderer: nameRenderer},
+            {header: '分数',  width: 60,  dataIndex: 'score',   sortable: true, hidden: !isVote},
+            {header: '票数',  width: 60,  dataIndex: 'count',   sortable: true, hidden: !isVote},
+            {header: '投票',  width: 50,  dataIndex: 'my_vote', renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
+            {header: isVote ? '投票人' : '支持者', dataIndex: 'voters', renderer: votersRenderer, hidden: !isVote},
+        ]);
+
+        var toolbar_items = [];
+        if ( !isEnded ) {
+            toolbar_items.push({
+                text: '新增候选',
+                handler: function() { addVoteEntry(eventData, entryDs); }
+            });
+        }
+        if ( logintype == 0 && eventData.event_type === 'enroll' && eventData.siries_id ) {
+            toolbar_items.push('-');
+            toolbar_items.push({
+                text: '导出报名到比赛',
+                handler: function() {
+                    Ext.Ajax.request({
+                        url: tturl, method: 'POST',
+                        params: {action: 'importVoteToSeries', event_id: event_id},
+                        success: function(r) {
+                            var d = Ext.util.JSON.decode(r.responseText);
+                            Ext.Msg.alert(d.success ? '成功' : '错误',
+                                d.success ? '已导出' + d.imported + ' 人' : d.msg);
+                        },
+                    });
+                }
+            });
+        }
+
+        var grid = new Ext.grid.GridPanel(Object.assign({}, grid_default, {
+            ds: entryDs,
+            cm: cm,
+            title: eventData.event_name + ' — ' + (eventData.event_type === 'enroll' ? '报名' : '投票') + '列表',
+            tbar: toolbar_items.length ? new Ext.Toolbar({items: toolbar_items}) : undefined,
+            listeners: {
+                cellclick: function(g, rowIndex, colIndex) {
+                    var col = g.getColumnModel().getColumnId(colIndex);
+                    if ( col !== 'vote_action_col' ) return;
+                    if ( isEnded ) return;
+                    var record = g.getStore().getAt(rowIndex);
+                    Ext.Ajax.request({
+                        url: tturl, method: 'POST',
+                        params: {action: 'castVote', entry_id: record.get('entry_id')},
+                        success: function(r) {
+                            var d = Ext.util.JSON.decode(r.responseText);
+                            if ( d.success ) {
+                                entryDs.reload();
+                            } else {
+                                Ext.Msg.alert('提示', d.msg);
+                            }
+                        },
+                    });
+                },
+            },
+        }));
+
+        // Add delete-entry button to toolbar after grid is created so we can reference grid
+        if ( toolbar_items.length ) {
+            grid.getTopToolbar().add('-', {
+                text: '删除选中候选',
+                handler: function() {
+                    var sel = grid.getSelectionModel().getSelected();
+                    if ( !sel ) { Ext.Msg.alert('提示', '请先选中一行'); return; }
+                    var name = sel.get('cn_name1') || sel.get('userid1');
+                    Ext.Msg.confirm('确认删除', '确定删除候选 "' + name + '"？', function(btn) {
+                        if ( btn !== 'yes' ) return;
+                        Ext.Ajax.request({
+                            url: tturl, method: 'POST',
+                            params: {action: 'deleteVoteEntry', entry_id: sel.get('entry_id')},
+                            success: function(r) {
+                                var d = Ext.util.JSON.decode(r.responseText);
+                                if ( d.success ) { entryDs.reload(); }
+                                else { Ext.Msg.alert('错误', d.msg); }
+                            },
+                        });
+                    });
+                }
+            });
+        }
+
+        container.removeAll(true);
+        container.add(grid);
+        container.doLayout();
+    };
+
+    var addVoteEntry = function(eventData, entryDs) {
+        var person_count = eventData.person_count;
+        var isEnroll     = eventData.event_type === 'enroll';
+
+        var userStore1 = new Ext.data.JsonStore({
+            url: tturl, method: 'POST',
+            baseParams: {action: 'getUserList', filter: 'valid'},
+            autoLoad: true,
+            root: 'users', id: 'userid', fields: userRecord,
+        });
+        var userStore2 = new Ext.data.JsonStore({ fields: userRecord });
+        userStore1.on('load', function(s, recs) { userStore2.add(recs.map(function(r) { return r.copy(); })); });
+
+        var av1id = Ext.id(), av2id = Ext.id();
+
+        var combo1Row = {
+            layout: 'column', xtype: 'container', defaults: {layout: 'form'},
+            items: [
+                { items: [{
+                    fieldLabel: person_count == 1 ? '选手' : '选手1',
+                    xtype: 'combo', name: 'userid1_fake', hiddenName: 'userid1',
+                    allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
+                    triggerAction: 'all', mode: 'local',
+                    store: userStore1, displayField: 'full_name', valueField: 'userid',
+                    listeners: {
+                        select: function(combo, record) {
+                            Ext.getCmp(av1id).getEl().dom.src = getAvatar(record.data);
+                        },
+                        change: function(combo, n) {
+                            var r = userStore1.getById(n);
+                            if ( r ) Ext.getCmp(av1id).getEl().dom.src = getAvatar(r.data);
+                        },
+                        afterrender: function(c) {
+                            if ( isEnroll ) {
+                                userStore1.on('load', function(s) {
+                                    var r = s.getById(currentUserID);
+                                    if ( r ) {
+                                        c.setValue(r.get('userid'));
+                                        Ext.getCmp(av1id).getEl().dom.src = getAvatar(r.data);
+                                    }
+                                    c.setReadOnly(true);
+                                    if ( c.trigger ) c.trigger.hide();
+                                });
+                            }
+                        },
+                    },
+                }]},
+                { items: [{ xtype: 'box', id: av1id, autoEl: {tag: 'img', height: 48, src: 'etc/男.png'} }] },
+            ]
+        };
+
+        var items = [combo1Row];
+
+        if ( person_count == 2 ) {
+            items.push({
+                layout: 'column', xtype: 'container', defaults: {layout: 'form'},
+                items: [
+                    { items: [{
+                        fieldLabel: '选手2',
+                        xtype: 'combo', name: 'userid2_fake', hiddenName: 'userid2',
+                        allowBlank: false, editable: true, forceSelection: true, typeAhead: true,
+                        triggerAction: 'all', mode: 'local',
+                        store: userStore2, displayField: 'full_name', valueField: 'userid',
+                        listeners: {
+                            select: function(combo, record) {
+                                Ext.getCmp(av2id).getEl().dom.src = getAvatar(record.data);
+                            },
+                            change: function(combo, n) {
+                                var r = userStore2.getById(n);
+                                if ( r ) Ext.getCmp(av2id).getEl().dom.src = getAvatar(r.data);
+                            },
+                        },
+                    }]},
+                    { items: [{ xtype: 'box', id: av2id, autoEl: {tag: 'img', height: 48, src: 'etc/男.png'} }] },
+                ]
+            });
+        }
+
+        var fp = new Ext.FormPanel({
+            url: tturl, method: 'POST',
+            frame: true, labelWidth: 60, labelAlign: 'right',
+            items: items,
+            buttons: [{
+                text: '确认',
+                handler: function() {
+                    fp.getForm().submit({
+                        params: {action: 'addVoteEntry', event_id: eventData.event_id},
+                        success: function() { win.close(); if (entryDs) entryDs.reload(); },
+                        failure: function(f, a) { Ext.Msg.alert('错误', a.result ? a.result.msg : '添加失败'); },
+                    });
+                }
+            },{ text: '取消', handler: function() { win.close(); } }],
+        });
+
+        var win = new Ext.Window({
+            title: '新增候选', width: 480, modal: true, autoHeight: true, items: [fp],
+        });
+        win.show();
+        win.doLayout();
+    };
+
     var showMatches = function(id, id2) {
         var userList = new Ext.data.JsonStore({
             url: tturl,
@@ -1496,6 +1899,11 @@ TT.app = function() {
                 },{
                     text: '系列赛事',
                     handler: function () { savePage('series'); showSeries(); }
+                },{
+                    text: '报名投票',
+                    handler: function () { savePage('votes'); showVoteEvents(); }
+                },{
+                    xtype: 'box', autoEl: { tag: 'hr', style: 'margin:8px 16px; border-color:#aaa' }
                 },{
                     text: '所有用户',
                     handler: function () { savePage('users'); showUsers(); }

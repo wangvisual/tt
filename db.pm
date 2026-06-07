@@ -65,9 +65,12 @@ sub init_db($self) {
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_USERS(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, userid NOT NULL, original_point INTEGER, group_number INTEGER DEFAULT 1, PRIMARY KEY (siries_id, stage, userid))");
     $dbh->do("CREATE TABLE IF NOT EXISTS SERIES_DATE(siries_id INTEGER NOT NULL, stage INTEGER NOT NULL, start TEXT, end TEXT, PRIMARY KEY (siries_id, stage))");
     $dbh->do("CREATE TABLE IF NOT EXISTS CONTENT (name NOT NULL, version INTEGER NOT NULL, content TEXT NOT NULL, updated_by TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (name, version))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_EVENTS (event_id INTEGER PRIMARY KEY ASC, event_name TEXT NOT NULL, event_type TEXT NOT NULL DEFAULT 'vote', start_time TEXT, end_time TEXT, person_count INTEGER NOT NULL DEFAULT 1, votes_per_user INTEGER NOT NULL DEFAULT 1, male_score REAL NOT NULL DEFAULT 1.0, female_score REAL NOT NULL DEFAULT 1.0, siries_id INTEGER, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_ENTRIES (entry_id INTEGER PRIMARY KEY ASC, event_id INTEGER NOT NULL, userid1 TEXT NOT NULL, userid2 TEXT, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_RECORDS (record_id INTEGER PRIMARY KEY ASC, entry_id INTEGER NOT NULL, voter_id TEXT NOT NULL, voted_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(entry_id, voter_id))");
     $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage,type) VALUES(?,?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3, 'free'], 0 );
     $self->exec("INSERT INTO SERIES_DATE(siries_id, stage, start) VALUES(?,?,?);", [1, 3, '2019-08-01'], 0 );
-    $dbh->do("PRAGMA user_version = 2");
+    $dbh->do("PRAGMA user_version = 3");
 }
 
 sub upgrade_db($self) {
@@ -78,6 +81,12 @@ sub upgrade_db($self) {
         $dbh->do("ALTER TABLE SERIES ADD COLUMN type TEXT NOT NULL DEFAULT 'normal'");
         $dbh->do("UPDATE SERIES SET type='free' WHERE stage=3 OR siries_id=1");
         $dbh->do("PRAGMA user_version = 2");
+    }
+    if ( $user_version < 3 ) {
+        $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_EVENTS (event_id INTEGER PRIMARY KEY ASC, event_name TEXT NOT NULL, event_type TEXT NOT NULL DEFAULT 'vote', start_time TEXT, end_time TEXT, person_count INTEGER NOT NULL DEFAULT 1, votes_per_user INTEGER NOT NULL DEFAULT 1, male_score REAL NOT NULL DEFAULT 1.0, female_score REAL NOT NULL DEFAULT 1.0, siries_id INTEGER, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_ENTRIES (entry_id INTEGER PRIMARY KEY ASC, event_id INTEGER NOT NULL, userid1 TEXT NOT NULL, userid2 TEXT, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_RECORDS (record_id INTEGER PRIMARY KEY ASC, entry_id INTEGER NOT NULL, voter_id TEXT NOT NULL, voted_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(entry_id, voter_id))");
+        $dbh->do("PRAGMA user_version = 3");
     }
 }
 

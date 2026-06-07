@@ -1224,6 +1224,250 @@ sub printheader($q) {
                         );
 }
 
+sub getVoteEvents() {
+    my @events = $db->exec(
+        'SELECT e.event_id, e.event_name, e.event_type, e.start_time, e.end_time, '
+      . 'e.person_count, e.votes_per_user, e.male_score, e.female_score, e.siries_id, '
+      . 's.siries_name, '
+      . '(SELECT count(*) FROM VOTE_ENTRIES ve WHERE ve.event_id=e.event_id) AS entry_count '
+      . 'FROM VOTE_EVENTS e LEFT JOIN SERIES s ON e.siries_id=s.siries_id '
+      . 'ORDER BY e.event_id DESC;',
+        [], 1
+    );
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1, events => \@events };
+}
+
+sub editVoteEvent() {
+    my $event_id      = get_param('event_id') || -1;
+    my $event_name    = get_param('event_name', '');
+    return { success => 0, msg => '名称不能为空' } if $event_name eq '';
+    return { success => 0, msg => '只有管理员可以修改投票项目' } if $event_id > 0 && !isAdmin($userid);
+    my $event_type    = get_param('event_type', 'vote');
+    $event_type       = 'vote' if $event_type ne 'vote' && $event_type ne 'enroll';
+    my $start_time    = get_param('start_time',    '') || undef;
+    my $end_time      = get_param('end_time',      '') || undef;
+    my $person_count  = get_param('person_count')  || 1;
+    my $votes_per_user = get_param('votes_per_user') || 1;
+    my $male_score    = get_param('male_score')    // 1.0;
+    my $female_score  = get_param('female_score')  // 1.0;
+    my $siries_id     = get_param('siries_id')     || undef;
+
+    if ( $event_id > 0 ) {
+        $db->exec(
+            'UPDATE VOTE_EVENTS SET event_name=?,event_type=?,start_time=?,end_time=?,person_count=?,votes_per_user=?,male_score=?,female_score=?,siries_id=? WHERE event_id=?;',
+            [$event_name, $event_type, $start_time, $end_time, $person_count, $votes_per_user, $male_score, $female_score, $siries_id, $event_id], 0
+        );
+    } else {
+        $db->exec(
+            'INSERT INTO VOTE_EVENTS(event_name,event_type,start_time,end_time,person_count,votes_per_user,male_score,female_score,siries_id,created_by) VALUES(?,?,?,?,?,?,?,?,?,?);',
+            [$event_name, $event_type, $start_time, $end_time, $person_count, $votes_per_user, $male_score, $female_score, $siries_id, $userid], 2
+        );
+        $event_id = $db->{last_insert_id};
+    }
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1, event_id => $event_id };
+}
+
+sub getVoteEntries() {
+    my $event_id = get_param('event_id') || 0;
+    return { success => 0, msg => 'event_id required' } if !$event_id;
+
+    my @events = $db->exec('SELECT * FROM VOTE_EVENTS WHERE event_id=?;', [$event_id], 1);
+    return { success => 0, msg => 'event not found' } if !@events;
+    my $event = $events[0];
+
+    my @entries = $db->exec(
+        'SELECT e.entry_id, e.event_id, e.userid1, e.userid2, '
+      . 'u1.cn_name AS cn_name1, u1.gender AS gender1, u1.employeeNumber AS emp1, '
+      . 'u2.cn_name AS cn_name2, u2.gender AS gender2, u2.employeeNumber AS emp2 '
+      . 'FROM VOTE_ENTRIES e '
+      . 'LEFT JOIN USERS u1 ON e.userid1=u1.userid '
+      . 'LEFT JOIN USERS u2 ON e.userid2=u2.userid '
+      . 'WHERE e.event_id=? ORDER BY e.entry_id ASC;',
+        [$event_id], 1
+    );
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+
+    my @records = $db->exec(
+        'SELECT r.entry_id, r.voter_id, u.cn_name, u.gender, u.employeeNumber '
+      . 'FROM VOTE_RECORDS r '
+      . 'JOIN VOTE_ENTRIES e ON r.entry_id=e.entry_id '
+      . 'JOIN USERS u ON r.voter_id=u.userid '
+      . 'WHERE e.event_id=?;',
+        [$event_id], 1
+    );
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+
+    my $male_score   = $event->{male_score}   // 1.0;
+    my $female_score = $event->{female_score} // 1.0;
+    my %vote_info;
+    foreach my $r (@records) {
+        my $eid = $r->{entry_id};
+        $vote_info{$eid} //= { score => 0, count => 0, my_vote => 0, voters => [] };
+        my $pts = $r->{gender} eq '女' ? $female_score : $male_score;
+        $vote_info{$eid}{score} += $pts;
+        $vote_info{$eid}{count}++;
+        $vote_info{$eid}{my_vote} = 1 if $r->{voter_id} eq $userid;
+        push $vote_info{$eid}{voters}->@*, {
+            userid         => $r->{voter_id},
+            cn_name        => $r->{cn_name},
+            gender         => $r->{gender},
+            employeeNumber => $r->{employeeNumber},
+        };
+    }
+    foreach my $e (@entries) {
+        my $vi = $vote_info{$e->{entry_id}} // { score => 0, count => 0, my_vote => 0, voters => [] };
+        $e->{score}   = $vi->{score};
+        $e->{count}   = $vi->{count};
+        $e->{my_vote} = $vi->{my_vote};
+        $e->{voters}  = $vi->{voters};
+    }
+    @entries = sort { $b->{score} <=> $a->{score} } @entries;
+    { success => 1, entries => \@entries, event => $event };
+}
+
+sub addVoteEntry() {
+    my $event_id = get_param('event_id') || 0;
+    my $userid1  = lc(get_param('userid1', ''));
+    my $userid2  = lc(get_param('userid2', ''));
+    return { success => 0, msg => 'event_id required' } if !$event_id;
+    return { success => 0, msg => '第一个用户不能为空' } if $userid1 eq '';
+
+    my @events = $db->exec('SELECT * FROM VOTE_EVENTS WHERE event_id=?;', [$event_id], 1);
+    return { success => 0, msg => 'event not found' } if !@events;
+    my $event = $events[0];
+
+    my $now = localtime->strftime('%Y-%m-%d %H:%M:%S');
+    return { success => 0, msg => '投票已结束，不能新增' }
+        if $event->{end_time} && $event->{end_time} le $now;
+
+    return { success => 0, msg => '报名类型第一人必须是自己' }
+        if $event->{event_type} eq 'enroll' && $userid1 ne $userid;
+
+    my @existing = $db->exec('SELECT userid1, userid2 FROM VOTE_ENTRIES WHERE event_id=?;', [$event_id], 1);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+
+    foreach my $ex (@existing) {
+        if ( $event->{person_count} == 1 ) {
+            return { success => 0, msg => '此人已在列表中' } if $ex->{userid1} eq $userid1;
+        } else {
+            my ($ea, $eb) = ($ex->{userid1}, $ex->{userid2} // '');
+            my ($na, $nb) = ($userid1, $userid2);
+            return { success => 0, msg => '此组合已在列表中' }
+                if ( $ea eq $na && $eb eq $nb ) || ( $ea eq $nb && $eb eq $na );
+        }
+    }
+
+    my $u2 = $userid2 eq '' ? undef : $userid2;
+    $db->exec('INSERT INTO VOTE_ENTRIES(event_id,userid1,userid2,created_by) VALUES(?,?,?,?);',
+              [$event_id, $userid1, $u2, $userid], 2);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1, entry_id => $db->{last_insert_id} };
+}
+
+sub castVote() {
+    my $entry_id = get_param('entry_id') || 0;
+    return { success => 0, msg => 'entry_id required' } if !$entry_id;
+
+    my @entries = $db->exec(
+        'SELECT e.event_id, ev.end_time, ev.votes_per_user '
+      . 'FROM VOTE_ENTRIES e JOIN VOTE_EVENTS ev ON e.event_id=ev.event_id '
+      . 'WHERE e.entry_id=?;',
+        [$entry_id], 1
+    );
+    return { success => 0, msg => 'entry not found' } if !@entries;
+    my $entry = $entries[0];
+
+    my $now = localtime->strftime('%Y-%m-%d %H:%M:%S');
+    return { success => 0, msg => '投票已结束' }
+        if $entry->{end_time} && $entry->{end_time} le $now;
+
+    # Toggle: cancel if already voted
+    my @existing = $db->exec('SELECT record_id FROM VOTE_RECORDS WHERE entry_id=? AND voter_id=?;',
+                             [$entry_id, $userid], 1);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    if ( @existing ) {
+        $db->exec('DELETE FROM VOTE_RECORDS WHERE entry_id=? AND voter_id=?;', [$entry_id, $userid], 0);
+        return { success => 0, msg => $db->{errstr} } if $db->{error};
+        return { success => 1, voted => 0 };
+    }
+
+    # Check votes_per_user limit
+    my @my_votes = $db->exec(
+        'SELECT count(*) AS cnt FROM VOTE_RECORDS r '
+      . 'JOIN VOTE_ENTRIES e ON r.entry_id=e.entry_id '
+      . 'WHERE e.event_id=? AND r.voter_id=?;',
+        [$entry->{event_id}, $userid], 1
+    );
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    my $cnt = $my_votes[0]->{cnt} // 0;
+    return { success => 0, msg => "已达到最大投票数($entry->{votes_per_user}票)" }
+        if $cnt >= $entry->{votes_per_user};
+
+    $db->exec('INSERT INTO VOTE_RECORDS(entry_id,voter_id) VALUES(?,?);', [$entry_id, $userid], 0);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1, voted => 1 };
+}
+
+sub importVoteToSeries() {
+    return { success => 0, msg => '只有管理员可以执行导入' } if !isAdmin($userid);
+    my $event_id = get_param('event_id') || 0;
+    return { success => 0, msg => 'event_id required' } if !$event_id;
+
+    my @events = $db->exec('SELECT * FROM VOTE_EVENTS WHERE event_id=?;', [$event_id], 1);
+    return { success => 0, msg => 'event not found' } if !@events;
+    my $event = $events[0];
+    return { success => 0, msg => '只有报名类型才能导入' } if $event->{event_type} ne 'enroll';
+    return { success => 0, msg => '未关联系列赛' }         if !$event->{siries_id};
+
+    my @series = $db->exec('SELECT stage FROM SERIES WHERE siries_id=?;', [$event->{siries_id}], 1);
+    return { success => 0, msg => 'series not found' }      if !@series;
+    return { success => 0, msg => '关联系列赛不在报名阶段' } if $series[0]->{stage} != 0;
+
+    my @entries = $db->exec('SELECT userid1 FROM VOTE_ENTRIES WHERE event_id=?;', [$event_id], 1);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+
+    my $point = getBasePoint($event->{siries_id}, 'users');
+    my $imported = 0;
+    foreach my $e (@entries) {
+        my $uid = $e->{userid1};
+        $db->exec('INSERT OR IGNORE INTO SERIES_USERS(siries_id,stage,userid,original_point,group_number) VALUES(?,?,?,?,?)',
+                  [$event->{siries_id}, 0, $uid, $point->{$uid} // 0, 1], 0);
+        $imported++ if !$db->{error};
+    }
+    { success => 1, imported => $imported };
+}
+
+sub deleteVoteEvent() {
+    return { success => 0, msg => '只有管理员可以删除投票项目' } if !isAdmin($userid);
+    my $event_id = get_param('event_id') || 0;
+    return { success => 0, msg => 'event_id required' } if !$event_id;
+    # Cascade: delete vote records, then entries, then event
+    my @entries = $db->exec('SELECT entry_id FROM VOTE_ENTRIES WHERE event_id=?;', [$event_id], 1);
+    foreach my $e (@entries) {
+        $db->exec('DELETE FROM VOTE_RECORDS WHERE entry_id=?;', [$e->{entry_id}], 0);
+    }
+    $db->exec('DELETE FROM VOTE_ENTRIES WHERE event_id=?;', [$event_id], 0);
+    $db->exec('DELETE FROM VOTE_EVENTS WHERE event_id=?;',  [$event_id], 0);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1 };
+}
+
+sub deleteVoteEntry() {
+    my $entry_id = get_param('entry_id') || 0;
+    return { success => 0, msg => 'entry_id required' } if !$entry_id;
+    # Only admin or the creator can delete
+    my @entries = $db->exec('SELECT created_by FROM VOTE_ENTRIES WHERE entry_id=?;', [$entry_id], 1);
+    return { success => 0, msg => 'entry not found' } if !@entries;
+    return { success => 0, msg => '只有管理员或创建者可以删除' }
+        if !isAdmin($userid) && ($entries[0]->{created_by} // '') ne $userid;
+    $db->exec('DELETE FROM VOTE_RECORDS WHERE entry_id=?;', [$entry_id], 0);
+    $db->exec('DELETE FROM VOTE_ENTRIES WHERE entry_id=?;',  [$entry_id], 0);
+    return { success => 0, msg => $db->{errstr} } if $db->{error};
+    { success => 1 };
+}
+
 sub check_server($q) {
     return if !defined $ENV{SERVER_NAME} || $ENV{SERVER_NAME} eq $settings::servername;
     printheader($q);
@@ -1249,7 +1493,8 @@ sub main() {
         exit 0;
     }
     my @valid_actions = qw(getGeneralInfo getUserList getUserInfo editUser getPointList isAdmin getMatch getMatches editMatch getSeries editSeries
-        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers getContent editContent);
+        editSeriesUser getSeriesMatch getSeriesMatchGroups getPointHistory replay checkAllUsers getContent editContent
+        getVoteEvents editVoteEvent getVoteEntries addVoteEntry castVote importVoteToSeries deleteVoteEvent deleteVoteEntry);
     if ( $action ) {
         # we already use utf8, perl will use unicode internally, so JSON shouldn't care about it
         # https://stackoverflow.com/questions/10708297/perl-convert-a-string-to-utf-8-for-json-decode
