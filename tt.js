@@ -1197,16 +1197,19 @@ TT.app = function() {
         var isEnded = eventData.end_time && new Date(eventData.end_time) < new Date();
 
         var entryRecord = Ext.data.Record.create([
-            {name: 'entry_id',  type: 'int'},
-            {name: 'userid1'}, {name: 'userid2'},
-            {name: 'cn_name1'},{name: 'cn_name2'},
-            {name: 'gender1'}, {name: 'gender2'},
-            {name: 'emp1',     type: 'int'},
-            {name: 'emp2',     type: 'int'},
-            {name: 'score',    type: 'float'},
-            {name: 'count',    type: 'int'},
-            {name: 'my_vote',  type: 'int'},
+            {name: 'entry_id',   type: 'int'},
+            {name: 'userid1'},   {name: 'userid2'},
+            {name: 'cn_name1'},  {name: 'cn_name2'},
+            {name: 'gender1'},   {name: 'gender2'},
+            {name: 'emp1',       type: 'int'},
+            {name: 'emp2',       type: 'int'},
+            {name: 'score',      type: 'float'},
+            {name: 'count',      type: 'int'},
+            {name: 'my_vote',    type: 'int'},
             {name: 'voters'},
+            {name: 'created_by'},
+            {name: 'created_at'},
+            {name: 'creator_name'},
         ]);
         var entryDs = new Ext.data.Store({
             proxy: new Ext.data.HttpProxy({url: tturl, method: 'POST'}),
@@ -1244,10 +1247,12 @@ TT.app = function() {
 
         var cm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
-            {header: nameHeader, width: 160, dataIndex: 'cn_name1', renderer: nameRenderer},
-            {header: '分数',  width: 60,  dataIndex: 'score',   sortable: true, hidden: !isVote},
-            {header: '票数',  width: 60,  dataIndex: 'count',   sortable: true, hidden: !isVote},
-            {header: '投票',  width: 50,  dataIndex: 'my_vote', renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
+            {header: nameHeader,  width: 160, dataIndex: 'cn_name1',   renderer: nameRenderer},
+            {header: '创建者',    width: 80,  dataIndex: 'creator_name', sortable: true},
+            {header: '创建时间',  width: 130, dataIndex: 'created_at', sortable: true},
+            {header: '分数',      width: 60,  dataIndex: 'score',      sortable: true, hidden: !isVote},
+            {header: '票数',      width: 60,  dataIndex: 'count',      sortable: true, hidden: !isVote},
+            {header: '投票',      width: 50,  dataIndex: 'my_vote',    renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
             {header: isVote ? '投票人' : '支持者', dataIndex: 'voters', renderer: votersRenderer, hidden: !isVote},
         ]);
 

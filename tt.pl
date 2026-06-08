@@ -1278,12 +1278,14 @@ sub getVoteEntries() {
     my $event = $events[0];
 
     my @entries = $db->exec(
-        'SELECT e.entry_id, e.event_id, e.userid1, e.userid2, '
+        'SELECT e.entry_id, e.event_id, e.userid1, e.userid2, e.created_by, e.created_at, '
+      . 'COALESCE(uc.cn_name, e.created_by) AS creator_name, '
       . 'u1.cn_name AS cn_name1, u1.gender AS gender1, u1.employeeNumber AS emp1, '
       . 'u2.cn_name AS cn_name2, u2.gender AS gender2, u2.employeeNumber AS emp2 '
       . 'FROM VOTE_ENTRIES e '
       . 'LEFT JOIN USERS u1 ON e.userid1=u1.userid '
       . 'LEFT JOIN USERS u2 ON e.userid2=u2.userid '
+      . 'LEFT JOIN USERS uc ON e.created_by=uc.userid '
       . 'WHERE e.event_id=? ORDER BY e.entry_id ASC;',
         [$event_id], 1
     );
