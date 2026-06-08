@@ -1220,6 +1220,7 @@ TT.app = function() {
             {name: 'created_by'},
             {name: 'created_at'},
             {name: 'creator_name'},
+            {name: 'match_result'},
         ]);
         var entryDs = new Ext.data.Store({
             proxy: new Ext.data.HttpProxy({url: tturl, method: 'POST'}),
@@ -1254,6 +1255,13 @@ TT.app = function() {
         };
 
         var isVote = eventData.event_type !== 'enroll';
+        var showMatchResult = isVote && eventData.siries_id && eventData.person_count == 2;
+
+        var matchResultRenderer = function(v, m, record) {
+            var mr = record.get('match_result');
+            if ( !mr ) return '';
+            return Ext.util.Format.htmlEncode(mr);
+        };
 
         var cm = new Ext.grid.ColumnModel([
             new Ext.grid.RowNumberer(),
@@ -1264,6 +1272,7 @@ TT.app = function() {
             {header: '票数',      width: 60,  dataIndex: 'count',      sortable: true, hidden: !isVote},
             {header: '投票',      width: 50,  dataIndex: 'my_vote',    renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
             {header: isVote ? '投票人' : '支持者', dataIndex: 'voters', renderer: votersRenderer, hidden: !isVote},
+            {header: '比赛结果',  width: 180, dataIndex: 'match_result', renderer: matchResultRenderer, hidden: !showMatchResult},
         ]);
 
         var toolbar_items = [];

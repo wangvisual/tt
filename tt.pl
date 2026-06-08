@@ -1325,6 +1325,52 @@ sub getVoteEntries() {
         $e->{my_vote} = $vi->{my_vote};
         $e->{voters}  = $vi->{voters};
     }
+
+    # For vote type with a linked free series and 2-person entries, attach match results
+    if ( $event->{event_type} eq 'vote' && $event->{siries_id} && $event->{person_count} == 2 ) {
+        my @series_info = $db->exec('SELECT type FROM SERIES WHERE siries_id=?;', [$event->{siries_id}], 1);
+        if ( @series_info && ($series_info[0]->{type} // '') eq 'free' ) {
+            # Both perspectives are stored — fetch all rows, use userid's own row directly
+            my @all_details = $db->exec(
+                'SELECT d.match_id, d.userid, d.userid2, d.game_win, d.game_lose '
+              . 'FROM MATCH_DETAILS d JOIN MATCHES m ON d.match_id=m.match_id '
+              . 'WHERE m.siries_id=?;',
+                [$event->{siries_id}], 1
+            );
+            my @all_games = $db->exec(
+                'SELECT g.match_id, g.game_number, g.userid, g.win, g.lose '
+              . 'FROM GAMES g JOIN MATCHES m ON g.match_id=m.match_id '
+              . 'WHERE m.siries_id=? ORDER BY g.game_number ASC;',
+                [$event->{siries_id}], 1
+            );
+            # Index MATCH_DETAILS by directional pair "userid,userid2"
+            my %md_by_pair;
+            foreach my $d (@all_details) {
+                next unless $d->{userid2};
+                push $md_by_pair{"$d->{userid},$d->{userid2}"}->@*, $d;
+            }
+            # Index GAMES by "match_id,userid"
+            my %games_idx;
+            foreach my $g (@all_games) {
+                push $games_idx{"$g->{match_id},$g->{userid}"}->@*, $g;
+            }
+
+            foreach my $e (@entries) {
+                next unless $e->{userid2};
+                my $matches = $md_by_pair{"$e->{userid1},$e->{userid2}"} // next;
+                my @results_for_entry;
+                foreach my $d (@$matches) {
+                    # game_win/game_lose already from userid1's perspective
+                    my @sets = map { "$_->{win}:$_->{lose}" }
+                        ($games_idx{"$d->{match_id},$e->{userid1}"} // [])->@*;
+                    my $sets_str = @sets ? ' (' . join(' ', @sets) . ')' : '';
+                    push @results_for_entry, "$d->{game_win}:$d->{game_lose}$sets_str";
+                }
+                $e->{match_result} = join('; ', @results_for_entry) if @results_for_entry;
+            }
+        }
+    }
+
     @entries = sort { $b->{score} <=> $a->{score} } @entries;
     { success => 1, entries => \@entries, event => $event };
 }
