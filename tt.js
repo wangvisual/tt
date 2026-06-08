@@ -44,6 +44,16 @@ TT.app = function() {
     Ext.QuickTips.init();
     Ext.form.Field.prototype.msgTarget = 'side';
 
+    // SQLite stores datetime as UTC "YYYY-MM-DD HH:MM:SS", convert to browser local time
+    var utcToLocal = function(utcStr) {
+        if ( !utcStr ) return '';
+        var d = new Date(utcStr.replace(' ', 'T') + 'Z'); // append Z to mark as UTC
+        if ( isNaN(d) ) return utcStr;
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    };
+
     var getClass = function(record) {
         if ( record.get('logintype') == 2 ) return 'Disable';
         var point = record.get('point');
@@ -1249,7 +1259,7 @@ TT.app = function() {
             new Ext.grid.RowNumberer(),
             {header: nameHeader,  width: 160, dataIndex: 'cn_name1',   renderer: nameRenderer},
             {header: '创建者',    width: 80,  dataIndex: 'creator_name', sortable: true},
-            {header: '创建时间',  width: 130, dataIndex: 'created_at', sortable: true},
+            {header: '创建时间',  width: 130, dataIndex: 'created_at', sortable: true, renderer: utcToLocal},
             {header: '分数',      width: 60,  dataIndex: 'score',      sortable: true, hidden: !isVote},
             {header: '票数',      width: 60,  dataIndex: 'count',      sortable: true, hidden: !isVote},
             {header: '投票',      width: 50,  dataIndex: 'my_vote',    renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
