@@ -1464,6 +1464,13 @@ sub deleteVoteEntry() {
     return { success => 0, msg => 'entry not found' } if !@entries;
     return { success => 0, msg => '只有管理员或创建者可以删除' }
         if !isAdmin($userid) && ($entries[0]->{created_by} // '') ne $userid;
+    # If others have voted on this entry, only admin can delete
+    if ( !isAdmin($userid) ) {
+        my @votes = $db->exec('SELECT count(*) AS cnt FROM VOTE_RECORDS WHERE entry_id=? AND voter_id != ?;',
+                              [$entry_id, $userid], 1);
+        return { success => 0, msg => '已有其他人投票，只有管理员可以删除' }
+            if ($votes[0]->{cnt} // 0) > 0;
+    }
     $db->exec('DELETE FROM VOTE_RECORDS WHERE entry_id=?;', [$entry_id], 0);
     $db->exec('DELETE FROM VOTE_ENTRIES WHERE entry_id=?;',  [$entry_id], 0);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
