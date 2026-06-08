@@ -1054,6 +1054,7 @@ TT.app = function() {
             {name: 'female_score',  type: 'float'},
             {name: 'siries_id',     type: 'int'},
             {name: 'siries_name'},
+            {name: 'siries_type'},
             {name: 'entry_count',   type: 'int'},
         ]);
         var eventDs = new Ext.data.Store({
@@ -1353,6 +1354,17 @@ TT.app = function() {
 
         container.removeAll(true);
         container.add(grid);
+        if ( eventData.siries_id ) {
+            container.add({
+                xtype: 'box',
+                autoEl: { tag: 'div', style: 'height: 150px;' }
+            });
+            container.add({
+                xtype: 'box',
+                autoEl: { tag: 'div', style: 'padding: 0 4px 6px;', html: '对应比赛结果：' }
+            });
+            showSeriesMatchGroups(eventData.siries_id, eventData.siries_name, eventData.siries_type === 'free', container);
+        }
         container.doLayout();
     };
 
@@ -1660,7 +1672,8 @@ TT.app = function() {
         listpanel.doLayout();
     };
 
-    var showSeriesMatchGroups = function(siries_id, siries_name, is_free) {
+    var showSeriesMatchGroups = function(siries_id, siries_name, is_free, targetPanel) {
+        targetPanel = targetPanel || listpanel;
         var myds = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
@@ -1671,15 +1684,16 @@ TT.app = function() {
             fields: ['siries_id', 'stage', 'group_number'],
             listeners: {
                 load: function(store, records, options ) {
-                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free) );
-                    listpanel.doLayout();
+                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free, targetPanel) );
+                    targetPanel.doLayout();
                 },
             },
         });
     };
-    var showSeriesMatch = function(siries_id, siries_name, stage, group_number, is_free) {
+    var showSeriesMatch = function(siries_id, siries_name, stage, group_number, is_free, targetPanel) {
+        targetPanel = targetPanel || listpanel;
         var content_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
-        listpanel.remove(content_id);
+        targetPanel.remove(content_id);
         var title = siries_name + ' ' + renderStage(stage) + ' 第' + group_number + '组 结果';
         var content;
         var myds = new Ext.data.JsonStore({
@@ -1813,7 +1827,7 @@ TT.app = function() {
             myds.load();
         }
 
-        listpanel.add(content);
+        targetPanel.add(content);
     };
 
     // public space

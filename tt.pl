@@ -1228,7 +1228,7 @@ sub getVoteEvents() {
     my @events = $db->exec(
         'SELECT e.event_id, e.event_name, e.event_type, e.start_time, e.end_time, '
       . 'e.person_count, e.votes_per_user, e.male_score, e.female_score, e.siries_id, '
-      . 's.siries_name, '
+      . 's.siries_name, s.type AS siries_type, '
       . '(SELECT count(*) FROM VOTE_ENTRIES ve WHERE ve.event_id=e.event_id) AS entry_count '
       . 'FROM VOTE_EVENTS e LEFT JOIN SERIES s ON e.siries_id=s.siries_id '
       . 'ORDER BY e.event_id DESC;',
