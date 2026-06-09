@@ -1295,7 +1295,7 @@ sub getVoteEntries() {
         'SELECT r.entry_id, r.voter_id, u.cn_name, u.gender, u.employeeNumber '
       . 'FROM VOTE_RECORDS r '
       . 'JOIN VOTE_ENTRIES e ON r.entry_id=e.entry_id '
-      . 'JOIN USERS u ON r.voter_id=u.userid '
+      . 'LEFT JOIN USERS u ON r.voter_id=u.userid '
       . 'WHERE e.event_id=?;',
         [$event_id], 1
     );
@@ -1433,6 +1433,20 @@ sub castVote() {
     my $now = localtime->strftime('%Y-%m-%d %H:%M:%S');
     return { success => 0, msg => '投票已结束' }
         if $entry->{end_time} && $entry->{end_time} le $now;
+
+    # Auto-create user if not in DB (get name from LDAP or fall back to userid)
+    my @user_check = $db->exec('SELECT userid FROM USERS WHERE userid=?;', [$userid], 1);
+    if ( !@user_check ) {
+        my $info = getUserInfo($userid);
+        my $u = $info->{user}[0];
+        my $name  = ($u && $u->{name})  ? $u->{name}  : $userid;
+        my $email = ($u && $u->{email}) ? $u->{email} : '';
+        my $empno = ($u && $u->{employeeNumber}) ? $u->{employeeNumber} : 0;
+        $db->exec(
+            'INSERT OR IGNORE INTO USERS(userid,name,cn_name,email,employeeNumber,logintype,gender,point) VALUES(?,?,?,?,?,?,?,?);',
+            [$userid, $name, '', $email, $empno, NORMAL_ACCOUNT, '未知', 0], 0
+        );
+    }
 
     # Toggle: cancel if already voted
     my @existing = $db->exec('SELECT record_id FROM VOTE_RECORDS WHERE entry_id=? AND voter_id=?;',
