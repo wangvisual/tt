@@ -1077,7 +1077,7 @@ TT.app = function() {
 
         var eventCm = new Ext.grid.ColumnModel([
             {header: 'ID',       width: 40,  dataIndex: 'event_id',       sortable: true},
-            {header: '名称',     width: 200, dataIndex: 'event_name',     sortable: true},
+            {header: '名称',     width: 280, dataIndex: 'event_name',     sortable: true},
             {header: '类型',     width: 60,  dataIndex: 'event_type',     sortable: true, renderer: voteTypeRenderer},
             {header: '状态',     width: 60,  dataIndex: 'end_time',       renderer: statusRenderer},
             {header: '开始',     width: 130, dataIndex: 'start_time',     sortable: true},
@@ -1086,7 +1086,7 @@ TT.app = function() {
             {header: '可投票数', width: 70,  dataIndex: 'votes_per_user', sortable: true},
             {header: '男生分值', width: 70,  dataIndex: 'male_score',     sortable: true},
             {header: '女生分值', width: 70,  dataIndex: 'female_score',   sortable: true},
-            {header: '关联赛事', width: 120, dataIndex: 'siries_name',    sortable: true},
+            {header: '关联赛事', width: 200, dataIndex: 'siries_name',    sortable: true},
             {header: '条目数',   width: 60,  dataIndex: 'entry_count',    sortable: true},
         ]);
 
@@ -1183,13 +1183,18 @@ TT.app = function() {
             buttons: [{
                 text: '保存',
                 handler: function() {
+                    var btn = this;
+                    btn.disable();
                     fp.getForm().submit({
                         params: { action: 'editVoteEvent', event_id: isNew ? -1 : eventData.event_id },
                         success: function(f, a) {
                             win.close();
                             if ( eventDs ) eventDs.reload();
                         },
-                        failure: function(f, a) { Ext.Msg.alert('错误', a.result ? a.result.msg : '保存失败'); },
+                        failure: function(f, a) {
+                            btn.enable();
+                            Ext.Msg.alert('错误', a.result ? a.result.msg : '保存失败');
+                        },
                     });
                 }
             },{ text: '取消', handler: function() { win.close(); } }],
@@ -1311,11 +1316,14 @@ TT.app = function() {
                     var col = g.getColumnModel().getColumnId(colIndex);
                     if ( col !== 'vote_action_col' ) return;
                     if ( isEnded ) return;
+                    if ( g._votePending ) return;
+                    g._votePending = true;
                     var record = g.getStore().getAt(rowIndex);
                     Ext.Ajax.request({
                         url: tturl, method: 'POST',
                         params: {action: 'castVote', entry_id: record.get('entry_id')},
                         success: function(r) {
+                            g._votePending = false;
                             var d = Ext.util.JSON.decode(r.responseText);
                             if ( d.success ) {
                                 entryDs.reload();
@@ -1323,6 +1331,7 @@ TT.app = function() {
                                 Ext.Msg.alert('提示', d.msg);
                             }
                         },
+                        failure: function() { g._votePending = false; },
                     });
                 },
             },
@@ -1453,10 +1462,15 @@ TT.app = function() {
             buttons: [{
                 text: '确认',
                 handler: function() {
+                    var btn = this;
+                    btn.disable();
                     fp.getForm().submit({
                         params: {action: 'addVoteEntry', event_id: eventData.event_id},
                         success: function() { win.close(); if (entryDs) entryDs.reload(); },
-                        failure: function(f, a) { Ext.Msg.alert('错误', a.result ? a.result.msg : '添加失败'); },
+                        failure: function(f, a) {
+                            btn.enable();
+                            Ext.Msg.alert('错误', a.result ? a.result.msg : '添加失败');
+                        },
                     });
                 }
             },{ text: '取消', handler: function() { win.close(); } }],

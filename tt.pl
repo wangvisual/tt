@@ -1393,6 +1393,9 @@ sub addVoteEntry() {
     return { success => 0, msg => '报名类型第一人必须是自己' }
         if $event->{event_type} eq 'enroll' && $userid1 ne $userid;
 
+    return { success => 0, msg => '各位选手不能是同一人' }
+        if $userid2 ne '' && $userid1 eq $userid2;
+
     my @existing = $db->exec('SELECT userid1, userid2 FROM VOTE_ENTRIES WHERE event_id=?;', [$event_id], 1);
     return { success => 0, msg => $db->{errstr} } if $db->{error};
 
