@@ -1422,7 +1422,7 @@ sub castVote() {
     return { success => 0, msg => 'entry_id required' } if !$entry_id;
 
     my @entries = $db->exec(
-        'SELECT e.event_id, ev.end_time, ev.votes_per_user '
+        'SELECT e.event_id, e.userid1, e.userid2, ev.end_time, ev.votes_per_user, ev.siries_id, ev.event_type, ev.person_count '
       . 'FROM VOTE_ENTRIES e JOIN VOTE_EVENTS ev ON e.event_id=ev.event_id '
       . 'WHERE e.entry_id=?;',
         [$entry_id], 1
@@ -1433,6 +1433,18 @@ sub castVote() {
     my $now = localtime->strftime('%Y-%m-%d %H:%M:%S');
     return { success => 0, msg => '投票已结束' }
         if $entry->{end_time} && $entry->{end_time} le $now;
+
+    # Block voting if the entry already has a match result in the linked series
+    if ( ($entry->{event_type} // '') eq 'vote' && $entry->{siries_id}
+         && ($entry->{person_count} // 0) == 2
+         && $entry->{userid1} && $entry->{userid2} ) {
+        my @has_match = $db->exec(
+            'SELECT 1 FROM MATCH_DETAILS d JOIN MATCHES m ON d.match_id=m.match_id '
+          . 'WHERE m.siries_id=? AND d.userid=? AND d.userid2=? LIMIT 1;',
+            [$entry->{siries_id}, $entry->{userid1}, $entry->{userid2}], 1
+        );
+        return { success => 0, msg => '该对阵已有比赛结果，不能投票或取消投票' } if @has_match;
+    }
 
     # Auto-create user if not in DB (get name from LDAP or fall back to userid)
     my @user_check = $db->exec('SELECT userid FROM USERS WHERE userid=?;', [$userid], 1);

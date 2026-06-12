@@ -1247,9 +1247,11 @@ TT.app = function() {
 
         var voteIconRenderer = function(v, m, record) {
             if ( isEnded ) return '';
-            return record.get('my_vote')
-                ? "<img src='etc/enroll.png' style='cursor:pointer;opacity:1' title='已投票，点击取消'/>"
-                : "<img src='etc/enroll.png' style='cursor:pointer;opacity:0.3' title='点击投票'/>";
+            var voted = record.get('my_vote'), hasMatch = record.get('match_result');
+            var cursor = hasMatch ? 'not-allowed' : 'pointer';
+            var title  = hasMatch ? (voted ? '已比赛，无法取消投票' : '已比赛，无法投票')
+                                  : (voted ? '已投票，点击取消'     : '点击投票');
+            return "<img src='etc/vote.svg' height='16' style='cursor:" + cursor + ";opacity:" + (voted ? '1' : '0.3') + "' title='" + title + "'/>";
         };
 
         var nameHeader = person_count == 1 ? '选手' : '选手1 / 选手2';
