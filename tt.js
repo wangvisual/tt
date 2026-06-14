@@ -1238,11 +1238,19 @@ TT.app = function() {
         var votersRenderer = function(v, m, record) {
             var voters = record.get('voters') || [];
             if ( !voters.length ) return '';
-            return voters.map(function(u) {
+            var inner = voters.map(function(u) {
                 var img = getAvatar(u);
-                return "<span class='avatar'><img height='14' src='" + img + "'/>"
-                     + "<span><img height='100' src='" + img + "'/><br/>" + Ext.util.Format.htmlEncode(u.cn_name) + "</span></span>";
-            }).join(' ');
+                var name = Ext.util.Format.htmlEncode(u.cn_name || u.userid || '');
+                return "<img height='14' src='" + img + "' style='vertical-align:middle'/> " + name;
+            }).join('&nbsp; ');
+            var tooltipCells = voters.map(function(u) {
+                var img = getAvatar(u);
+                var name = Ext.util.Format.htmlEncode(u.cn_name || u.userid || '');
+                return "<td style='text-align:center;padding:0 6px'><img height='100' src='" + img + "'/><br/>" + name + "</td>";
+            }).join('');
+            var tooltip = "<table><tr>" + tooltipCells + "</tr></table>";
+            return "<span class='avatar'>" + inner
+                 + "<span style='background:white;color:black;padding:4px'>" + tooltip + "</span></span>";
         };
 
         var voteIconRenderer = function(v, m, record) {
@@ -1256,10 +1264,27 @@ TT.app = function() {
 
         var nameHeader = person_count == 1 ? '选手' : '选手1 / 选手2';
         var nameRenderer = function(v, m, record) {
-            var n1 = record.get('cn_name1') || record.get('userid1');
-            var n2 = record.get('cn_name2') || record.get('userid2');
-            return person_count == 1 ? Ext.util.Format.htmlEncode(n1)
-                 : Ext.util.Format.htmlEncode(n1) + ' / ' + Ext.util.Format.htmlEncode(n2 || '');
+            var makeAvatarSpan = function(u) {
+                var img = getAvatar(u);
+                var name = Ext.util.Format.htmlEncode(u.cn_name || u.userid || '');
+                return "<img height='14' src='" + img + "' style='vertical-align:middle'/> " + name;
+            };
+            var u1 = { userid: record.get('userid1'), cn_name: record.get('cn_name1'), gender: record.get('gender1'), employeeNumber: record.get('emp1') };
+            var u2 = record.get('userid2') ? { userid: record.get('userid2'), cn_name: record.get('cn_name2'), gender: record.get('gender2'), employeeNumber: record.get('emp2') } : null;
+
+            var img1 = getAvatar(u1), img2 = u2 ? getAvatar(u2) : null;
+            var makePersonCell = function(img, name) {
+                return "<td style='text-align:center;padding:0 6px'><img height='100' src='" + img + "'/><br/>" + name + "</td>";
+            };
+            var tooltipContent = "<table><tr>"
+                               + makePersonCell(img1, Ext.util.Format.htmlEncode(u1.cn_name || u1.userid || ''))
+                               + (u2 ? makePersonCell(img2, Ext.util.Format.htmlEncode(u2.cn_name || u2.userid || '')) : '')
+                               + "</tr></table>";
+
+            var inner = makeAvatarSpan(u1);
+            if ( u2 ) inner += ' / ' + makeAvatarSpan(u2);
+            return "<span class='avatar'>" + inner
+                 + "<span style='background:white;color:black;padding:4px'>" + tooltipContent + "</span></span>";
         };
 
         var isVote = eventData.event_type !== 'enroll';
@@ -1279,7 +1304,7 @@ TT.app = function() {
             {header: '分数',      width: 60,  dataIndex: 'score',      sortable: true, hidden: !isVote},
             {header: '票数',      width: 60,  dataIndex: 'count',      sortable: true, hidden: !isVote},
             {header: '投票',      width: 50,  dataIndex: 'my_vote',    renderer: voteIconRenderer, id: 'vote_action_col', hidden: !isVote},
-            {header: isVote ? '投票人' : '支持者', dataIndex: 'voters', renderer: votersRenderer, hidden: !isVote},
+            {header: isVote ? '投票人' : '支持者', width: 300, dataIndex: 'voters', renderer: votersRenderer, hidden: !isVote},
             {header: '比赛结果',  width: 180, dataIndex: 'match_result', renderer: matchResultRenderer, hidden: !showMatchResult},
         ]);
 
@@ -1339,7 +1364,7 @@ TT.app = function() {
             },
         }));
 
-        // Add delete-entry button to toolbar after grid is created so we can reference grid
+        // Add delete-entry button and filter combos to toolbar after grid is created
         if ( toolbar_items.length ) {
             grid.getTopToolbar().add('-', {
                 text: '删除选中候选',
@@ -1361,6 +1386,59 @@ TT.app = function() {
                     });
                 }
             });
+        }
+
+        // Filter combos — built after entryDs loads so we have all user names
+        var applyFilters = function(playerVal, voterVal) {
+            if ( !playerVal && !voterVal ) {
+                entryDs.clearFilter();
+                return;
+            }
+            entryDs.clearFilter(true);
+            entryDs.filterBy(function(record) {
+                if ( playerVal ) {
+                    var u1 = record.get('userid1'), u2 = record.get('userid2') || '';
+                    if ( u1 !== playerVal && u2 !== playerVal ) return false;
+                }
+                if ( voterVal ) {
+                    var voters = record.get('voters') || [];
+                    if ( !voters.some(function(v) { return v.userid === voterVal; }) ) return false;
+                }
+                return true;
+            });
+        };
+
+        var filterUserStore = new Ext.data.JsonStore({
+            url: tturl, method: 'POST',
+            baseParams: {action: 'getUserList', filter: 'valid'},
+            autoLoad: true, root: 'users', id: 'userid', fields: userRecord,
+        });
+
+        var playerCombo = new Ext.form.ComboBox({
+            emptyText: '过滤选手…', width: 150, triggerAction: 'all', mode: 'local',
+            store: filterUserStore, displayField: 'full_name', valueField: 'userid',
+            editable: true, forceSelection: false, typeAhead: true,
+            listeners: {
+                select: function(c) { applyFilters(c.getValue(), voterCombo.getValue()); setTimeout(function(){ if(c.el) c.el.dom.select(); }, 0); },
+                blur:   function(c) { if ( !c.el.dom.value ) applyFilters('', voterCombo.getValue()); },
+                focus:  function(c) { if ( c.el ) c.el.dom.select(); },
+            }
+        });
+        var voterCombo = new Ext.form.ComboBox({
+            emptyText: '过滤投票人…', width: 150, triggerAction: 'all', mode: 'local',
+            store: filterUserStore, displayField: 'full_name', valueField: 'userid',
+            editable: true, forceSelection: false, typeAhead: true,
+            listeners: {
+                select: function(c) { applyFilters(playerCombo.getValue(), c.getValue()); setTimeout(function(){ if(c.el) c.el.dom.select(); }, 0); },
+                blur:   function(c) { if ( !c.el.dom.value ) applyFilters(playerCombo.getValue(), ''); },
+                focus:  function(c) { if ( c.el ) c.el.dom.select(); },
+            }
+        });
+
+        var tbar = grid.getTopToolbar();
+        if ( tbar ) {
+            tbar.add(' ', '选手:', playerCombo, ' ', '投票人:', voterCombo);
+            tbar.doLayout();
         }
 
         container.removeAll(true);
@@ -1574,8 +1652,12 @@ TT.app = function() {
                   store: userList,
                   displayField: 'full_name', valueField: 'userid', listeners: {
                       select: function(combo, record, index) {
-                          showMatches(record.data.userid, id2);
-                      }
+                          id = record.data.userid;
+                          showMatches(id, id2);
+                          setTimeout(function(){ if(combo.el) combo.el.dom.select(); }, 0);
+                      },
+                      blur: function(c) { if ( !c.el.dom.value ) { id = ''; showMatches(id, id2); } },
+                      focus: function(c) { if ( c.el ) c.el.dom.select(); },
                   },
                 },
                 { xtype: 'tbtext', text: ' VS ' },
@@ -1584,8 +1666,12 @@ TT.app = function() {
                   store: userList,
                   displayField: 'full_name', valueField: 'userid', listeners: {
                       select: function(combo, record, index) {
-                          showMatches(id, record.data.userid);
-                      }
+                          id2 = record.data.userid;
+                          showMatches(id, id2);
+                          setTimeout(function(){ if(combo.el) combo.el.dom.select(); }, 0);
+                      },
+                      blur: function(c) { if ( !c.el.dom.value ) { id2 = ''; showMatches(id, id2); } },
+                      focus: function(c) { if ( c.el ) c.el.dom.select(); },
                   },
                 },
                 '-',
