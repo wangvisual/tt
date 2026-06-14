@@ -29,7 +29,7 @@ sub new($proto, $dbname = undef) {
     $dbh->do("PRAGMA cache_size = -10000"); # default is 2000 for < 3.12, -2000 for >= 3.12, set to negtive number for KBytes, positive number for pages, -10000 is 10M Bytes
     $dbh->do("PRAGMA journal_mode = PERSIST");
     $dbh->do("PRAGMA temp_store = MEMORY");
-    $dbh->do("PRAGMA synchronous = OFF"); # faster but not safe
+    $dbh->do("PRAGMA synchronous = NORMAL");
     $dbh->do("PRAGMA locking_mode = NORMAL");
     $dbh->do("PRAGMA page_size = 4096");
     $self->init_db() if !$dbfile_exists;
@@ -68,9 +68,13 @@ sub init_db($self) {
     $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_EVENTS (event_id INTEGER PRIMARY KEY ASC, event_name TEXT NOT NULL, event_type TEXT NOT NULL DEFAULT 'vote', start_time TEXT, end_time TEXT, person_count INTEGER NOT NULL DEFAULT 1, votes_per_user INTEGER NOT NULL DEFAULT 1, male_score REAL NOT NULL DEFAULT 1.0, female_score REAL NOT NULL DEFAULT 1.0, siries_id INTEGER, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
     $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_ENTRIES (entry_id INTEGER PRIMARY KEY ASC, event_id INTEGER NOT NULL, userid1 TEXT NOT NULL, userid2 TEXT, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
     $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_RECORDS (record_id INTEGER PRIMARY KEY ASC, entry_id INTEGER NOT NULL, voter_id TEXT NOT NULL, voted_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(entry_id, voter_id))");
+    $dbh->do("CREATE INDEX IF NOT EXISTS idx_games_match_id        ON GAMES(match_id)");
+    $dbh->do("CREATE INDEX IF NOT EXISTS idx_matches_siries_id     ON MATCHES(siries_id)");
+    $dbh->do("CREATE INDEX IF NOT EXISTS idx_match_details_userid  ON MATCH_DETAILS(userid)");
+    $dbh->do("CREATE INDEX IF NOT EXISTS idx_vote_entries_event_id ON VOTE_ENTRIES(event_id)");
     $self->exec("INSERT INTO SERIES(siries_id,siries_name,number_of_groups,group_outlets,top_n,stage,type) VALUES(?,?,?,?,?,?,?);", [1, '自由约战', 1, 1, 1, 3, 'free'], 0 );
     $self->exec("INSERT INTO SERIES_DATE(siries_id, stage, start) VALUES(?,?,?);", [1, 3, '2019-08-01'], 0 );
-    $dbh->do("PRAGMA user_version = 3");
+    $dbh->do("PRAGMA user_version = 4");
 }
 
 sub upgrade_db($self) {
@@ -88,6 +92,13 @@ sub upgrade_db($self) {
         $dbh->do("CREATE TABLE IF NOT EXISTS VOTE_RECORDS (record_id INTEGER PRIMARY KEY ASC, entry_id INTEGER NOT NULL, voter_id TEXT NOT NULL, voted_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(entry_id, voter_id))");
         $dbh->do("PRAGMA user_version = 3");
     }
+    if ( $user_version < 4 ) {
+        $dbh->do("CREATE INDEX IF NOT EXISTS idx_games_match_id        ON GAMES(match_id)");
+        $dbh->do("CREATE INDEX IF NOT EXISTS idx_matches_siries_id     ON MATCHES(siries_id)");
+        $dbh->do("CREATE INDEX IF NOT EXISTS idx_match_details_userid  ON MATCH_DETAILS(userid)");
+        $dbh->do("CREATE INDEX IF NOT EXISTS idx_vote_entries_event_id ON VOTE_ENTRIES(event_id)");
+        $dbh->do("PRAGMA user_version = 4");
+    }
 }
 
 sub DESTROY {
@@ -97,7 +108,7 @@ sub DESTROY {
 
 sub disconnect($self) {
     return if !$self->{dbh};
-    #$self->{dbh}->do("PRAGMA optimize");
+    $self->{dbh}->do("PRAGMA optimize");
     $self->{dbh}->disconnect();
     delete $self->{dbh};
 }
