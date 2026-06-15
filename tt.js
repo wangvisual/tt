@@ -1787,11 +1787,56 @@ TT.app = function() {
             listeners: {
                 load: function(store, records, options ) {
                     records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free, targetPanel) );
+                    var stats = store.reader.jsonData.stats;
+                    if (stats) {
+                        targetPanel.remove('series_combined_stats_' + siries_id, true);
+                        renderMatchStats(stats, targetPanel, 'series_combined_stats_' + siries_id);
+                    }
                     targetPanel.doLayout();
                 },
             },
         });
     };
+    var renderMatchStats = function(stats, container, idPrefix) {
+        if (!stats || !stats.total) return;
+        var pct = function(n) { return stats.total > 0 ? Math.round(n * 100 / stats.total) : 0; };
+        var enc = Ext.util.Format.htmlEncode;
+        var multiRow = function(descs) {
+            if (!descs || !descs.length) return '';
+            return descs.map(function(d) { return enc(d); }).join('<br>');
+        };
+        var multiTip = function(descs) {
+            if (!descs || !descs.length) return '';
+            return enc(descs.join('\n'));
+        };
+        var scoreHtml = multiRow(stats.max_score_descs);
+        var gapHtml   = multiRow(stats.max_gap_descs);
+        var rows = [
+            ['总场数',      stats.total + ' 场', ''],
+            ['决胜局场数',  stats.deciding + ' 场（' + pct(stats.deciding) + '%）', ''],
+            ['逆转场数',    stats.reversal + ' 场（' + pct(stats.reversal) + '%）', ''],
+            ['最高单局比分', scoreHtml, multiTip(stats.max_score_descs)],
+            ['最悬殊比分',  gapHtml,   multiTip(stats.max_gap_descs)],
+        ];
+        var html = '<table style="border-collapse:collapse;width:100%;font-size:12px;">';
+        rows.forEach(function(r, i) {
+            var bg = i % 2 === 0 ? '#fff' : '#f5f5f5';
+            var tip = r[2] ? ' ext:qtip="' + r[2] + '"' : '';
+            html += '<tr style="background:' + bg + '"><td style="padding:3px 8px;width:30%;font-weight:bold;vertical-align:top;">' + r[0] + '</td>'
+                 +  '<td style="padding:3px 8px;"' + tip + '>' + r[1] + '</td></tr>';
+        });
+        html += '</table>';
+        container.add(new Ext.Panel({
+            id: idPrefix + '_stats',
+            title: '比赛统计',
+            autoHeight: true,
+            border: false,
+            frame: true,
+            html: html,
+        }));
+        container.doLayout();
+    };
+
     var showSeriesMatch = function(siries_id, siries_name, stage, group_number, is_free, targetPanel) {
         targetPanel = targetPanel || listpanel;
         var content_id = 'show_series_match_' + siries_id + '_' + stage + '_' + group_number;
@@ -1876,11 +1921,10 @@ TT.app = function() {
                     viewConfig: {forceFit: true},
                 });
                 content.add(pointGrid);
-                content.doLayout();
             });
         } else if ( stage != 2 ) {
-            content = new Ext.ux.DynamicGridPanel({
-                id: content_id,
+            var roundGrid = new Ext.ux.DynamicGridPanel({
+                id: content_id + '_grid',
                 ds: myds,
                 rowNumberer: true,
                 title : title,
@@ -1888,6 +1932,12 @@ TT.app = function() {
                 border: false,
                 frame: true,
                 renders: stageRenders,
+            });
+            content = new Ext.Panel({
+                id: content_id,
+                border: false,
+                autoHeight: true,
+                items: [roundGrid],
             });
         } else {
             function render_bracket(container, team, score, state) {

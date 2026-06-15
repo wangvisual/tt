@@ -578,7 +578,40 @@ sub getSeriesMatchGroups() {
     foreach ( @more ) {
         push @groups, $_ if !exists $g{$_->{siries_id}}->{$_->{stage}}->{$_->{group_number}};
     }
-    { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups };
+    my $all_data = getMatches($siries_id);
+    my $combined_stats = ($all_data->{success} && @{$all_data->{matches}}) ? calc_match_stats($all_data->{matches}) : undef;
+    { success=>!$db->{error}, msg => $db->{errstr}, groups =>\@groups, stats => $combined_stats };
+}
+
+sub calc_match_stats($matches) {
+    my ($deciding, $reversal) = (0, 0);
+    my ($max_hi, $max_gap) = (0, 0);
+    my (@max_hi_descs, @max_gap_descs);
+    foreach my $m (@$matches) {
+        next if $m->{waive};
+        my @games = @{$m->{games} // []};
+        next unless @games;
+        $deciding++ if $m->{game_lose} == $m->{game_win} - 1;   # e.g. 2-1 or 3-2
+        $reversal++ if $games[0]{win} < $games[0]{lose};         # winner lost first game
+        my ($cn1) = ($m->{full_name}  =~ /^[^,]+,\s*([^,]+)/);
+        my ($cn2) = ($m->{full_name2} =~ /^[^,]+,\s*([^,]+)/);
+        $cn1 //= $m->{full_name};  $cn2 //= $m->{full_name2};
+        foreach my $g (@games) {
+            my ($hi, $lo, $gw, $gl) = $g->{win} >= $g->{lose}
+                ? ($g->{win},  $g->{lose}, $cn1, $cn2)
+                : ($g->{lose}, $g->{win},  $cn2, $cn1);
+            my $desc_hi  = "$hi:$lo — $gw vs $gl ($m->{date})";
+            if    ($hi > $max_hi)  { $max_hi = $hi; @max_hi_descs = ($desc_hi); }
+            elsif ($hi == $max_hi) { push @max_hi_descs, $desc_hi; }
+            my $gap = $hi - $lo;
+            my $desc_gap = "$hi:$lo — $gw vs $gl ($m->{date})";
+            if    ($gap > $max_gap)  { $max_gap = $gap; @max_gap_descs = ($desc_gap); }
+            elsif ($gap == $max_gap) { push @max_gap_descs, $desc_gap; }
+        }
+    }
+    { total => scalar(@$matches), deciding => $deciding, reversal => $reversal,
+      max_score => $max_hi, max_score_descs => \@max_hi_descs,
+      max_gap   => $max_gap, max_gap_descs  => \@max_gap_descs }
 }
 
 sub getSeriesMatchBracket($matches, $userids, $users) {
@@ -691,7 +724,7 @@ sub getSeriesMatchBracket($matches, $userids, $users) {
         }
         push @results, [ @round ];
     }
-    { success=>1, metaData=>{root=>'bracket', fields=>['teams']}, bracket => {teams=>\@teams, results=>\@results} };
+    { success=>1, metaData=>{root=>'bracket', fields=>['teams']}, bracket => {teams=>\@teams, results=>\@results}, stats => calc_match_stats($matches) };
 }
 
 sub getSeriesMatchChallengeView($matches, $users) {
@@ -753,7 +786,7 @@ sub getSeriesMatchChallengeView($matches, $users) {
           change => $up->{change}, matches => $up->{matches}, details => $details }
     } sort { $user_points{$b}{change} <=> $user_points{$a}{change} } keys %user_points ];
 
-    { success=>1, metaData=>\%meta, results => $results, columns => $columns, point_changes => $point_changes };
+    { success=>1, metaData=>\%meta, results => $results, columns => $columns, point_changes => $point_changes, stats => calc_match_stats($matches) };
 }
 
 sub getSeriesMatch() {
@@ -816,7 +849,7 @@ sub getSeriesMatch() {
     push @columns, { header =>  '分数', dataIndex => '_score', renderer => 'renderScore' };
     unshift @columns, { header => '姓名', dataIndex => '_name' };
     my %meta = ( root => 'results', id => 'userid', fields => [ map{; {name => $_->{dataIndex}} } @columns] );
-    { success => 1, metaData => \%meta, columns => \@columns, results => \@results };
+    { success => 1, metaData => \%meta, columns => \@columns, results => \@results, stats => calc_match_stats($matches) };
 }
 
 sub editSeries() {
