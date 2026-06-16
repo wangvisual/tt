@@ -104,7 +104,18 @@ sub getUserInfo($uid = undef) {
 }
 
 sub getGeneralInfo() {
-    getUserInfo($userid);
+    my $info = getUserInfo($userid);
+    my @recent = $db->exec(
+        'SELECT d.game_win, d.game_lose, u.cn_name AS cn1, u2.cn_name AS cn2, m.date '
+      . 'FROM MATCH_DETAILS d '
+      . 'JOIN MATCHES m ON d.match_id = m.match_id '
+      . 'JOIN USERS u  ON d.userid  = u.userid '
+      . 'JOIN USERS u2 ON d.userid2 = u2.userid '
+      . 'WHERE d.win = 1 '
+      . 'ORDER BY m.date DESC, d.match_id DESC LIMIT 3;',
+        [], 1);
+    $info->{recent_matches} = \@recent;
+    $info;
 }
 
 sub get_param($name, $default = undef) {

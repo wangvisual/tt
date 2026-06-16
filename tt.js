@@ -426,6 +426,7 @@ TT.app = function() {
                 Ext.get('infoemail').dom.innerHTML = '';
                 Ext.get('infogender').dom.innerHTML = '';
                 Ext.get('infopoint').dom.innerHTML = '';
+                Ext.get('inforecent').dom.innerHTML = '';
             } else {
                 Ext.get('infoname').dom.innerHTML = "欢迎" + loginTypes[n.logintype][1] + " " + n.name;
                 Ext.get('infoemail').dom.innerHTML = n.email;
@@ -442,6 +443,12 @@ TT.app = function() {
                     currentUserID = jsonData.user[0].userid;
                     logintype = jsonData.user[0].logintype;
                     changeTxt(jsonData.user[0]);
+                    var recent = jsonData.recent_matches || [];
+                    if (recent.length) {
+                        Ext.get('inforecent').dom.innerHTML = '最新: ' + recent.map(function(m) {
+                            return m.cn1 + ' VS ' + m.cn2 + ' ' + m.game_win + ':' + m.game_lose;
+                        }).join('，');
+                    }
                     var btn = Ext.getCmp('btn_edit_content');
                     if ( btn ) { logintype === 0 ? btn.show() : btn.hide(); }
                     if ( !showGeneralInfo._initialDone ) {
@@ -2067,6 +2074,7 @@ TT.app = function() {
                     + '<td id="infoemail"></td>'
                     + '<td id="infogender"></td>'
                     + '<td id="infopoint"></td>'
+                    + '<td id="inforecent"></td>'
                     + '</tr></table></form>'
             });
 
