@@ -1825,17 +1825,20 @@ TT.app = function() {
             if (!descs || !descs.length) return '';
             return enc(descs.join('\n'));
         };
-        var scoreHtml = multiRow(stats.max_score_descs);
-        var gapHtml   = multiRow(stats.max_gap_descs);
         var rows = [
-            ['总场数',      stats.total + ' 场', ''],
-            ['决胜局场数',  stats.deciding + ' 场（' + pct(stats.deciding) + '%）', ''],
-            ['逆转场数',    stats.reversal + ' 场（' + pct(stats.reversal) + '%）', ''],
-            ['最高单局比分', scoreHtml, multiTip(stats.max_score_descs)],
-            ['最悬殊比分',  gapHtml,   multiTip(stats.max_gap_descs)],
+            ['总场数',        stats.total + ' 场', ''],
+            ['参赛人数',      stats.participants + ' 人', ''],
+            ['决胜局场数',    stats.deciding + ' 场（' + pct(stats.deciding) + '%）', ''],
+            ['逆转场数',      stats.reversal + ' 场（' + pct(stats.reversal) + '%）', ''],
+            ['最活跃选手',    enc(stats.most_active || ''), ''],
+            ['胜率最高',      enc(stats.best_win_rate || ''), ''],
+            ['最高单局比分',  multiRow(stats.max_score_descs), multiTip(stats.max_score_descs)],
+            ['最悬殊比分',    multiRow(stats.max_gap_descs),   multiTip(stats.max_gap_descs)],
+            ['单场最大积分变化', multiRow(stats.max_pt_descs), multiTip(stats.max_pt_descs)],
         ];
         var html = '<table style="border-collapse:collapse;width:100%;font-size:12px;">';
         rows.forEach(function(r, i) {
+            if (!r[1]) return;
             var bg = i % 2 === 0 ? '#fff' : '#f5f5f5';
             var tip = r[2] ? ' ext:qtip="' + r[2] + '"' : '';
             html += '<tr style="background:' + bg + '"><td style="padding:3px 8px;width:30%;font-weight:bold;vertical-align:top;">' + r[0] + '</td>'

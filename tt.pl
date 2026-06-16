@@ -596,17 +596,36 @@ sub getSeriesMatchGroups() {
 
 sub calc_match_stats($matches) {
     my ($deciding, $reversal) = (0, 0);
-    my ($max_hi, $max_gap) = (0, 0);
-    my (@max_hi_descs, @max_gap_descs);
+    my ($max_hi, $max_gap, $max_pt_change) = (0, 0, 0);
+    my (@max_hi_descs, @max_gap_descs, @max_pt_descs);
+    my %players; # { userid => { cn_name, matches, wins } }
+
     foreach my $m (@$matches) {
-        next if $m->{waive};
-        my @games = @{$m->{games} // []};
-        next unless @games;
-        $deciding++ if $m->{game_lose} == $m->{game_win} - 1;   # e.g. 2-1 or 3-2
-        $reversal++ if $games[0]{win} < $games[0]{lose};         # winner lost first game
         my ($cn1) = ($m->{full_name}  =~ /^[^,]+,\s*([^,]+)/);
         my ($cn2) = ($m->{full_name2} =~ /^[^,]+,\s*([^,]+)/);
         $cn1 //= $m->{full_name};  $cn2 //= $m->{full_name2};
+
+        $players{$m->{userid}}{cn_name}  //= $cn1;
+        $players{$m->{userid2}}{cn_name} //= $cn2;
+        $players{$m->{userid}}{matches}++;
+        $players{$m->{userid2}}{matches}++;
+        $players{$m->{userid}}{wins}++ unless $m->{waive};  # waive: winner still wins
+
+        # Max single-match point gain (winner only)
+        my $delta = $m->{point_after} - $m->{point_before};
+        if ($delta > 0) {
+            my $desc = "$delta（$cn1 VS $cn2，$m->{date}）";
+            if    ($delta > $max_pt_change)               { $max_pt_change = $delta; @max_pt_descs = ($desc); }
+            elsif ($delta == $max_pt_change)              { push @max_pt_descs, $desc; }
+        }
+
+        next if $m->{waive};
+        my @games = @{$m->{games} // []};
+        next unless @games;
+
+        $deciding++ if $m->{game_lose} == $m->{game_win} - 1;
+        $reversal++ if $games[0]{win} < $games[0]{lose};
+
         foreach my $g (@games) {
             my ($hi, $lo, $gw, $gl) = $g->{win} >= $g->{lose}
                 ? ($g->{win},  $g->{lose}, $cn1, $cn2)
@@ -620,9 +639,30 @@ sub calc_match_stats($matches) {
             elsif ($gap == $max_gap) { push @max_gap_descs, $desc_gap; }
         }
     }
-    { total => scalar(@$matches), deciding => $deciding, reversal => $reversal,
+
+    # Most active: all tied for max matches
+    my $max_m = (sort { $b <=> $a } map { $_->{matches} } values %players)[0] // 0;
+    my @most_active = map { "$_->{cn_name}（$_->{matches}场）" }
+                      grep { $_->{matches} == $max_m } values %players;
+
+    # Best win rate
+    my @qualified = values %players;
+    my $best_rate_str = '';
+    if (@qualified) {
+        my $best_rate = (sort { $b <=> $a }
+                         map  { ($_->{wins} // 0) / $_->{matches} } @qualified)[0];
+        my @best = grep { abs(($_->{wins}//0)/$_->{matches} - $best_rate) < 0.0001 } @qualified;
+        $best_rate_str = join('，', map {
+            sprintf("%s %d/%d（%d%%）", $_->{cn_name}, $_->{wins}//0, $_->{matches}, $best_rate*100)
+        } @best);
+    }
+
+    { total => scalar(@$matches), participants => scalar(keys %players),
+      deciding => $deciding, reversal => $reversal,
+      most_active => join('，', @most_active), best_win_rate => $best_rate_str,
       max_score => $max_hi, max_score_descs => \@max_hi_descs,
-      max_gap   => $max_gap, max_gap_descs  => \@max_gap_descs }
+      max_gap   => $max_gap, max_gap_descs  => \@max_gap_descs,
+      max_pt_change => $max_pt_change, max_pt_descs => \@max_pt_descs }
 }
 
 sub getSeriesMatchBracket($matches, $userids, $users) {
