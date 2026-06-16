@@ -1776,6 +1776,15 @@ TT.app = function() {
 
     var showSeriesMatchGroups = function(siries_id, siries_name, is_free, targetPanel) {
         targetPanel = targetPanel || listpanel;
+        var wrapperId = 'series_wrapper_' + siries_id;
+        targetPanel.remove(wrapperId, true);
+        var wrapper = new Ext.Panel({
+            id: wrapperId,
+            border: false,
+            autoHeight: true,
+            style: 'margin-top:16px;',
+        });
+        targetPanel.add(wrapper);
         var myds = new Ext.data.JsonStore({
             url: tturl,
             method: 'POST',
@@ -1786,11 +1795,11 @@ TT.app = function() {
             fields: ['siries_id', 'stage', 'group_number'],
             listeners: {
                 load: function(store, records, options ) {
-                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free, targetPanel) );
+                    records.map( r => showSeriesMatch(siries_id, siries_name, r.get('stage'), r.get('group_number'), is_free, wrapper) );
                     var stats = store.reader.jsonData.stats;
                     if (stats) {
-                        targetPanel.remove('series_combined_stats_' + siries_id, true);
-                        renderMatchStats(stats, targetPanel, 'series_combined_stats_' + siries_id);
+                        wrapper.remove('series_combined_stats_' + siries_id, true);
+                        renderMatchStats(stats, wrapper, 'series_combined_stats_' + siries_id);
                     }
                     targetPanel.doLayout();
                 },
@@ -1921,6 +1930,7 @@ TT.app = function() {
                     viewConfig: {forceFit: true},
                 });
                 content.add(pointGrid);
+                content.doLayout();
             });
         } else if ( stage != 2 ) {
             var roundGrid = new Ext.ux.DynamicGridPanel({

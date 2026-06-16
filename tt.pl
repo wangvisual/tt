@@ -604,7 +604,7 @@ sub calc_match_stats($matches) {
             if    ($hi > $max_hi)  { $max_hi = $hi; @max_hi_descs = ($desc_hi); }
             elsif ($hi == $max_hi) { push @max_hi_descs, $desc_hi; }
             my $gap = $hi - $lo;
-            my $desc_gap = "$hi:$lo — $gw vs $gl ($m->{date})";
+            my $desc_gap = "$hi:$lo — $gw ($m->{date})";
             if    ($gap > $max_gap)  { $max_gap = $gap; @max_gap_descs = ($desc_gap); }
             elsif ($gap == $max_gap) { push @max_gap_descs, $desc_gap; }
         }
