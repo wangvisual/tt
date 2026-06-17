@@ -1279,17 +1279,17 @@ TT.app = function() {
             var u1 = { userid: record.get('userid1'), cn_name: record.get('cn_name1'), gender: record.get('gender1'), employeeNumber: record.get('emp1') };
             var u2 = record.get('userid2') ? { userid: record.get('userid2'), cn_name: record.get('cn_name2'), gender: record.get('gender2'), employeeNumber: record.get('emp2') } : null;
 
-            var img1 = getAvatar(u1), img2 = u2 ? getAvatar(u2) : null;
+            // Sort players by cn_name
+            var players = u2 ? [u1, u2].sort(function(a, b) { return (a.cn_name||'').localeCompare(b.cn_name||'', 'zh'); }) : [u1];
+
             var makePersonCell = function(img, name) {
                 return "<td style='text-align:center;padding:0 6px'><img height='100' src='" + img + "'/><br/>" + name + "</td>";
             };
             var tooltipContent = "<table><tr>"
-                               + makePersonCell(img1, Ext.util.Format.htmlEncode(u1.cn_name || u1.userid || ''))
-                               + (u2 ? makePersonCell(img2, Ext.util.Format.htmlEncode(u2.cn_name || u2.userid || '')) : '')
+                               + players.map(function(u) { return makePersonCell(getAvatar(u), Ext.util.Format.htmlEncode(u.cn_name || u.userid || '')); }).join('')
                                + "</tr></table>";
 
-            var inner = makeAvatarSpan(u1);
-            if ( u2 ) inner += ' / ' + makeAvatarSpan(u2);
+            var inner = players.map(makeAvatarSpan).join(' / ');
             return "<span class='avatar'>" + inner
                  + "<span style='background:white;color:black;padding:4px'>" + tooltipContent + "</span></span>";
         };

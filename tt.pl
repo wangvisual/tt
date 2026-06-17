@@ -1380,7 +1380,7 @@ sub getVoteEntries() {
       . 'FROM VOTE_RECORDS r '
       . 'JOIN VOTE_ENTRIES e ON r.entry_id=e.entry_id '
       . 'LEFT JOIN USERS u ON r.voter_id=u.userid '
-      . 'WHERE e.event_id=?;',
+      . 'WHERE e.event_id=? ORDER BY r.record_id ASC;',
         [$event_id], 1
     );
     return { success => 0, msg => $db->{errstr} } if $db->{error};
