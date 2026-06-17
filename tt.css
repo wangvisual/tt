@@ -45,6 +45,10 @@ div.Bronze {
     width: 100%;
 }
 
+#inforecent {
+    padding: 1px 1px 1px 50px !important;
+}
+
 a.ttlink {
     cursor: pointer;
 }

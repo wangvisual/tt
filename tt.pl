@@ -112,7 +112,7 @@ sub getGeneralInfo() {
       . 'JOIN USERS u  ON d.userid  = u.userid '
       . 'JOIN USERS u2 ON d.userid2 = u2.userid '
       . 'WHERE d.win = 1 '
-      . 'ORDER BY m.date DESC, d.match_id DESC LIMIT 3;',
+      . 'ORDER BY m.date DESC, d.match_id DESC LIMIT 5;',
         [], 1);
     $info->{recent_matches} = \@recent;
     $info;
