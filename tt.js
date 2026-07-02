@@ -1300,6 +1300,13 @@ TT.app = function() {
         var matchResultRenderer = function(v, m, record) {
             var mr = record.get('match_result');
             if ( !mr ) return '';
+            // If names are sorted and userid2's cn_name sorts before userid1's, scores are from userid1's
+            // perspective but display order is userid2 first — flip each X:Y pair
+            var cn1 = record.get('cn_name1') || '', cn2 = record.get('cn_name2') || '';
+            var swapped = cn2 && cn1.localeCompare(cn2, 'zh') > 0;
+            if ( swapped ) {
+                mr = mr.replace(/(\d+):(\d+)/g, function(_, a, b) { return b + ':' + a; });
+            }
             return Ext.util.Format.htmlEncode(mr);
         };
 
