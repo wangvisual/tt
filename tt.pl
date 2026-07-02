@@ -1455,7 +1455,7 @@ sub getVoteEntries() {
         }
     }
 
-    @entries = sort { $b->{score} <=> $a->{score} } @entries;
+    @entries = sort { !!$b->{match_result} <=> !!$a->{match_result} || $b->{score} <=> $a->{score} } @entries;
     { success => 1, entries => \@entries, event => $event };
 }
 
